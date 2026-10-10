@@ -133,6 +133,14 @@ static func label(b: Dictionary) -> String:
 		"mouse": return "Mouse button %d" % int(b["c"])
 	return "?"
 
+# What an action responds to, split by device, for the Controls screen.
+static func split(action: String) -> Dictionary:
+	var keys: Array = []
+	var pad: Array = []
+	for b in all_for(action):
+		(pad if str(b["t"]) == "joy" else keys).append(b)
+	return {"keys": keys, "pad": pad}
+
 static func extras_text(action: String) -> String:
 	var parts: Array = []
 	for b in extra.get(action, []):

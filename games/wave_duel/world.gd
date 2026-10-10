@@ -30,8 +30,8 @@ const BUSTER_CHARGE_TIME := 1.8  # the buster charges itself; fire releases what
 const BUSTER_MIN := 0.25
 const BUSTER_MIN_DMG := 2.0
 const BUSTER_MAX_DMG := 12.0
-const GUARD_TIME := 1.6          # holographic shield (Y): up this long
-const GUARD_COOLDOWN := 2.4      # ...and ready again this long after you raise it
+const GUARD_TIME := 1.3          # holographic shield (Y): up this long
+const GUARD_COOLDOWN := 3.0      # ...and ready again this long after it DROPS (not after it goes up)
 const PERFECT_T := 0.16          # a shot that lands this soon after raising it is reflected
 const PIERCE := ["wave", "tide"]  # the shield cannot stop these outright (nor sword strikes: body contact) but takes the edge off
 const PIERCE_KEEP := 0.5         # share of a piercing hit that gets through a raised shield
@@ -483,7 +483,7 @@ func raise_guard() -> void:
 		return
 	guard_t = GUARD_TIME
 	guard_age = 0.0
-	guard_cd = GUARD_COOLDOWN
+	guard_cd = GUARD_TIME + GUARD_COOLDOWN
 	charge = 0.0
 
 func block_shot(s: Dictionary) -> void:
@@ -1252,7 +1252,7 @@ func draw_hud(f: Font) -> void:
 	var ready := gauge >= 1.0
 	hud_bar("custom_bar", gauge, Color("ffd166") if ready and int(t * 4) % 2 == 0 else Color("c77dff"))
 	hud_text(f, "custom_bar", "CUSTOM READY  -  press Q / LB" if ready else "CUSTOM", Color.WHITE, 11, HORIZONTAL_ALIGNMENT_CENTER)
-	hud_bar("shield_bar", 1.0 - guard_cd / GUARD_COOLDOWN, Color("5ee7ff") if guard_cd <= 0.0 else Color("ff9f1c"))
+	hud_bar("shield_bar", 1.0 - guard_cd / (GUARD_TIME + GUARD_COOLDOWN), Color("5ee7ff") if guard_cd <= 0.0 else Color("ff9f1c"))
 	hud_text(f, "shield_bar", "SHIELD", Color.WHITE, 9, HORIZONTAL_ALIGNMENT_CENTER)
 	var status := "Lock-on: sword cards only"
 	var scol := Color(1, 1, 1, 0.45)

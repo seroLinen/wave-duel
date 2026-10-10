@@ -537,10 +537,21 @@ func pad_status() -> String:
 		return "CONTROLLER: not detected (turn it on; if Steam is starting, wait a few seconds)"
 	return "CONTROLLER: connected - " + Input.get_joy_name(id)
 
+func draw_bind_tokens(f: Font, at: Vector2, list: Array, col: Color, action: String) -> void:
+	var x := at.x
+	for b in list:
+		var mine := false
+		for e in Binds.extra.get(action, []):
+			if Binds.same(e, b):
+				mine = true
+		var txt := Binds.short(b)
+		overlay.draw_string(f, Vector2(x, at.y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("ffd166") if mine else col)
+		x += f.get_string_size(txt + "  ", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+
 func draw_controls(f: Font) -> void:
 	overlay.draw_rect(Rect2(0, 0, W, H), Color(0.01, 0.02, 0.05, 1.0))
 	overlay.draw_string(f, Vector2(0, 70), "CONTROLS", HORIZONTAL_ALIGNMENT_CENTER, W, 32, Color("4cc9f0"))
-	overlay.draw_string(f, Vector2(0, 98), "pick an action, then press the button you want for it - keys, pad buttons and mouse clicks all work", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
+	overlay.draw_string(f, Vector2(0, 98), "keys on the left, controller on the right - yellow ones are yours", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
 	for i in Binds.ACTIONS.size():
 		var a: Dictionary = Binds.ACTIONS[i]
 		var r := Rect2(140, 124 + i * 44, 680, 38)
@@ -548,11 +559,13 @@ func draw_controls(f: Font) -> void:
 		overlay.draw_rect(r, Color(1, 1, 1, 0.14 if sel else 0.05))
 		overlay.draw_rect(r, Color(1, 1, 1, 0.8 if sel else 0.25), false, 2.0)
 		overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 25), str(a["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-		overlay.draw_string(f, Vector2(r.position.x + 230, r.position.y + 25), Binds.shown(str(a["id"])), HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 246, 13, Color("ffd166") if Binds.extra.has(str(a["id"])) else Color(1, 1, 1, 0.5))
+		var sp := Binds.split(str(a["id"]))
+		draw_bind_tokens(f, Vector2(r.position.x + 250, r.position.y + 24), sp["keys"], Color(1, 1, 1, 0.85), str(a["id"]))
+		draw_bind_tokens(f, Vector2(r.position.x + 520, r.position.y + 24), sp["pad"], Color("7df9ff"), str(a["id"]))
 	if bind_note_t > 0.0:
 		overlay.draw_string(f, Vector2(0, 494), bind_note, HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color("ff9f1c") if bind_note.begins_with("Heads") else Color("90be6d"))
-	overlay.draw_string(f, Vector2(0, H - 30), pad_status() + "    last button seen: " + (last_input if last_input != "" else "(press something)"), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color("7df9ff"))
-	overlay.draw_string(f, Vector2(0, H - 14), "W/S select    Enter: add a button (built-ins always keep working)    Backspace: remove added    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.6))
+	overlay.draw_string(f, Vector2(0, H - 30), pad_status() + "    last: " + (last_input if last_input != "" else "-"), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color("7df9ff"))
+	overlay.draw_string(f, Vector2(0, H - 14), "W/S select    Enter: add a button    Backspace: remove yours    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.6))
 	if bind_mode == 2:
 		overlay.draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.8))
 		overlay.draw_string(f, Vector2(0, 220), "Press the button for:", HORIZONTAL_ALIGNMENT_CENTER, W, 22, Color(1, 1, 1, 0.8))
