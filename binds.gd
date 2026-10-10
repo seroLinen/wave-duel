@@ -61,16 +61,18 @@ static func hit(b: Dictionary, e: InputEvent) -> bool:
 		"mouse": return e is InputEventMouseButton and e.pressed and e.button_index == int(b["c"])
 	return false
 
-const ADDITIVE := ["confirm", "menu", "shield"]   # their built-in keys always keep working
-
-# Once you set a button for an action, those buttons are the only ones it uses (so two actions can
-# no longer share a default by accident). Backspace in the Controls screen restores the defaults.
+# The built-in buttons ALWAYS work; buttons you add in the Controls screen work on top of them. Nothing you
+# bind can lock you out of an action. Backspace in the Controls screen removes the buttons you added.
 static func all_for(action: String) -> Array:
 	var out: Array = []
-	var mine: Array = extra.get(action, [])
-	if ADDITIVE.has(action) or mine.is_empty():
-		out.append_array(DEFAULTS.get(action, []))
-	out.append_array(mine)
+	out.append_array(DEFAULTS.get(action, []))
+	for b in extra.get(action, []):
+		var dup := false
+		for d in out:
+			if same(d, b):
+				dup = true
+		if not dup:
+			out.append(b)
 	return out
 
 static func matches(action: String, e: InputEvent) -> bool:
@@ -127,7 +129,7 @@ static func held_excluding(action: String, others: Array) -> bool:
 static func label(b: Dictionary) -> String:
 	match str(b["t"]):
 		"key": return "Key " + OS.get_keycode_string(int(b["c"]))
-		"joy": return "Pad button %d" % int(b["c"])
+		"joy": return "Pad " + pad_name(int(b["c"]))
 		"mouse": return "Mouse button %d" % int(b["c"])
 	return "?"
 
@@ -147,10 +149,29 @@ static func capture(e: InputEvent) -> Dictionary:
 		return {"t": "mouse", "c": int(e.button_index)}
 	return {}
 
+# Godot names face buttons by position: A bottom, B right, X left, Y top (a Pro Controller prints them differently).
+static func pad_name(i: int) -> String:
+	match i:
+		JOY_BUTTON_A: return "bottom"
+		JOY_BUTTON_B: return "right"
+		JOY_BUTTON_X: return "left"
+		JOY_BUTTON_Y: return "top"
+		JOY_BUTTON_BACK: return "Back"
+		JOY_BUTTON_START: return "Start"
+		JOY_BUTTON_LEFT_STICK: return "L-stick"
+		JOY_BUTTON_RIGHT_STICK: return "R-stick"
+		JOY_BUTTON_LEFT_SHOULDER: return "LB"
+		JOY_BUTTON_RIGHT_SHOULDER: return "RB"
+		JOY_BUTTON_DPAD_UP: return "D-up"
+		JOY_BUTTON_DPAD_DOWN: return "D-down"
+		JOY_BUTTON_DPAD_LEFT: return "D-left"
+		JOY_BUTTON_DPAD_RIGHT: return "D-right"
+	return "button %d" % i
+
 static func short(b: Dictionary) -> String:
 	match str(b["t"]):
 		"key": return OS.get_keycode_string(int(b["c"]))
-		"joy": return "Pad%d" % int(b["c"])
+		"joy": return pad_name(int(b["c"]))
 		"mouse": return "Mouse%d" % int(b["c"])
 	return "?"
 
@@ -162,7 +183,7 @@ static func shown(action: String) -> String:
 		parts.append(short(b))
 	if mine.is_empty():
 		return "default: " + ", ".join(parts)
-	return ("built-in + " if ADDITIVE.has(action) else "yours: ") + ", ".join(parts)
+	return "built-in + yours: " + ", ".join(parts)
 
 # Other actions that already use this button.
 static func users_of(b: Dictionary, except_action: String) -> Array:

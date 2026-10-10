@@ -66,6 +66,13 @@ static func dir() -> Vector2:
 	v.y += int(Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_DOWN)) - int(Input.is_joy_button_pressed(d, JOY_BUTTON_DPAD_UP))
 	return v.limit_length(1.0)
 
+# Left stick only (no D-pad), for menus that read D-pad presses as button events instead.
+static func stick() -> Vector2:
+	var d := id()
+	if d < 0:
+		return Vector2.ZERO
+	return Vector2(axis(JOY_AXIS_LEFT_X), axis(JOY_AXIS_LEFT_Y))
+
 # Fire = right bumper / right trigger only. Godot names face buttons by POSITION: bottom A, right B, left X, top Y.
 # (On a Nintendo Pro Controller that is B, A, Y, X.) In Wave Duel: bottom = play card / confirm, right = shield,
 # left = open Custom, top = lock on.

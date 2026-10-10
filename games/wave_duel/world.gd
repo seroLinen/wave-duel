@@ -162,6 +162,9 @@ func _input(e: InputEvent) -> void:
 	if Binds.matches("lockon", e):
 		toggle_lock()
 		return
+	if selecting and e is InputEventJoypadButton and e.pressed and (e.button_index == JOY_BUTTON_DPAD_LEFT or e.button_index == JOY_BUTTON_DPAD_RIGHT):
+		cur = clampi(cur + (1 if e.button_index == JOY_BUTTON_DPAD_RIGHT else -1), 0, hand.size() - 1)
+		return
 	var k := -1
 	if Binds.matches("custom", e):
 		k = KEY_Q
@@ -318,7 +321,7 @@ func tick(dt: float) -> void:
 			toggle_lock()
 		lock_prev = ny
 	if selecting:
-		var nx := Pad.dir().x
+		var nx := Pad.stick().x           # the D-pad moves the cursor from its button events (see _input)
 		if absf(nx) > 0.6 and absf(nav_prev) <= 0.6:
 			cur = clampi(cur + int(signf(nx)), 0, hand.size() - 1)
 		nav_prev = nx

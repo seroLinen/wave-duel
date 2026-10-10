@@ -164,6 +164,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--padtest" in args:
+		run_padtest()
+		return
 	if "--shieldtest" in args:
 		run_shieldtest()
 		return
@@ -370,7 +373,17 @@ func pad_key(b: int) -> int:
 		JOY_BUTTON_X, JOY_BUTTON_Y:
 			if state == S.MASH: return KEY_P
 			if state == S.BRIDGE: return KEY_BACKSPACE
-			return KEY_X
+			return 0   # (X deletes a mash in the hub: keyboard only, so a stray pad press can never do it)
+		JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT, JOY_BUTTON_DPAD_RIGHT:
+			if state == S.PLAY and not pause_open:
+				return 0   # the world reads the D-pad itself
+			if state == S.HUB and not pause_open:
+				return 0   # walking is polled
+			match b:
+				JOY_BUTTON_DPAD_UP: return KEY_W
+				JOY_BUTTON_DPAD_DOWN: return KEY_S
+				JOY_BUTTON_DPAD_LEFT: return KEY_A
+				JOY_BUTTON_DPAD_RIGHT: return KEY_D
 	return 0
 
 # Diagnostic: every button/key press the game really receives goes to user://input_log.txt
@@ -526,7 +539,8 @@ func draw_controls(f: Font) -> void:
 		overlay.draw_string(f, Vector2(r.position.x + 230, r.position.y + 25), Binds.shown(str(a["id"])), HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 246, 13, Color("ffd166") if Binds.extra.has(str(a["id"])) else Color(1, 1, 1, 0.5))
 	if bind_note_t > 0.0:
 		overlay.draw_string(f, Vector2(0, 494), bind_note, HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color("ff9f1c") if bind_note.begins_with("Heads") else Color("90be6d"))
-	overlay.draw_string(f, Vector2(0, H - 28), "W/S select    Enter: set a button (replaces the defaults)    Backspace: restore defaults    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
+	overlay.draw_string(f, Vector2(0, H - 30), "last button seen: " + (last_input if last_input != "" else "(press something)"), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color("7df9ff"))
+	overlay.draw_string(f, Vector2(0, H - 14), "W/S select    Enter: add a button (built-ins always keep working)    Backspace: remove added    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.6))
 	if bind_mode == 2:
 		overlay.draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.8))
 		overlay.draw_string(f, Vector2(0, 220), "Press the button for:", HORIZONTAL_ALIGNMENT_CENTER, W, 22, Color(1, 1, 1, 0.8))
@@ -1066,7 +1080,7 @@ func run_bindtest() -> void:
 	var q := InputEventKey.new()
 	q.keycode = KEY_Q
 	q.pressed = true
-	print("replaced default Q no longer fires custom: ", not Binds.matches("custom", q))
+	print("default Q still fires custom after adding a button: ", Binds.matches("custom", q))
 	# the exact situation from a real save: Enter bound to both Fire and Play next card
 	Binds.load_from({"fire": [{"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_SPACE}], "card": [{"t": "key", "c": KEY_ENTER}]})
 	var fire_keys: Array = []
@@ -1199,4 +1213,55 @@ func run_shieldtest() -> void:
 		Input.parse_input_event(ev)
 		await get_tree().create_timer(0.2).timeout
 		print("  ", Binds.short(b), " -> phase=%s guard_t=%.2f cd=%.2f" % [runner.phase, runner.guard_t, runner.guard_cd])
+	get_tree().quit()
+
+func pad_event(button: int, down: bool) -> void:
+	var ev := InputEventJoypadButton.new()
+	ev.device = 0
+	ev.button_index = button
+	ev.pressed = down
+	Input.parse_input_event(ev)
+
+func pad_tap(button: int, hold := 0.12) -> void:
+	pad_event(button, true)
+	await get_tree().create_timer(hold).timeout
+	pad_event(button, false)
+	await get_tree().create_timer(0.1).timeout
+
+# Raw pad buttons (as a Pro Controller reaches the game) into a live duel: does each one do its job?
+func run_padtest() -> void:
+	var idx := 0
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	start_play(carts[idx], false)
+	await get_tree().create_timer(2.3).timeout
+	var w = runner
+	var ok := true
+	w.gauge = 1.0
+	await pad_tap(JOY_BUTTON_X)
+	print("left (X) opens Custom: ", w.selecting); ok = ok and w.selecting
+	var c0: int = w.cur
+	await pad_tap(JOY_BUTTON_DPAD_RIGHT)
+	print("D-right moves cursor: ", w.cur, " (was ", c0, ")"); ok = ok and w.cur == c0 + 1
+	await pad_tap(JOY_BUTTON_A)
+	print("bottom (A) picks a card: ", w.picked.size()); ok = ok and w.picked.size() == 1
+	await pad_tap(JOY_BUTTON_X)
+	print("left (X) confirms: selecting=", w.selecting, " queued=", w.queue.size()); ok = ok and (not w.selecting) and w.queue.size() == 1
+	var shot_before: int = w.shots.size()
+	await pad_tap(JOY_BUTTON_B)
+	print("right (B) raises shield: guard_t=%.2f" % w.guard_t); ok = ok and w.guard_t > 0.0
+	w.guard_t = 0.0
+	w.guard_cd = 0.0
+	await pad_tap(JOY_BUTTON_RIGHT_SHOULDER)
+	print("RB does not raise the shield: ", w.guard_t == 0.0); ok = ok and w.guard_t == 0.0
+	# held-button polling cannot be injected without a real pad, so check the fire binding list instead
+	var fire_pad: Array = []
+	for b in Binds.effective_excluding("fire", ["card", "custom", "shield", "lockon"]):
+		if str(b["t"]) == "joy":
+			fire_pad.append(Binds.short(b))
+	print("pad buttons that fire: ", fire_pad, " (plus ZR trigger)"); ok = ok and fire_pad == ["RB"]
+	await pad_tap(JOY_BUTTON_Y)
+	print("top (Y) with no sword queued does nothing harmful: locked=", w.locked); ok = ok and not w.locked
+	print("PAD LAYOUT OK" if ok else "PAD LAYOUT BROKEN")
 	get_tree().quit()
