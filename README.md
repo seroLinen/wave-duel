@@ -46,7 +46,7 @@ the portal swells to fill your view, and past a ring on the floor you lose contr
 ## Run it
 
 1. Install [Godot 4.3](https://godotengine.org/download/archive/4.3-stable/).
-2. Open `project.godot` (or run `godot --path .`).
+2. Open `project.godot` (or run `godot --path .`). On Windows, double-click `play.bat` (put the path to your Godot exe in `godot_path.txt`, or set a `GODOT` environment variable).
 
 Re-render art (needs Python 3, Pillow, numpy): `python tools/anim_render.py` and `python tools/backdrop_render.py`.
 

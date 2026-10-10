@@ -8,7 +8,7 @@ Godot 4.3 game. Read `docs/PROJECT_NOTES.md` first (rules, tuning, test flags, g
     "$GODOT" --headless --path . -- --hudtest           # duel HUD must print "HUD LAYOUT OK"
     "$GODOT" --headless --path . -- --selftest          # every world with a bot (back up/restore user saves around it)
     "$GODOT" --path . -- --shot=shots/x.png --start=0 --shotdelay=2.2   # then LOOK at the screenshot
-Launch for the user with Start-Process on the non-console exe and `--path <this folder>`. Kill the running game first when changing code.
+The user launches the game themselves with `play.bat` (also a "Wave Duel" shortcut on their Desktop); Godot's path is in the git-ignored `godot_path.txt`. Only launch for them when asked: Start-Process on the non-console exe and `--path <this folder>`. Kill the running game first when changing code.
 The user's saves live in `%APPDATA%\Godot\app_userdata\Cartridge Hub\`; selftest overwrites them, so copy hub_save.json/mashes.json aside and restore.
 
 ## Hard rules from the user

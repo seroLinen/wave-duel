@@ -21,3 +21,6 @@ audio/_unlicensed/
 *.gba
 *.nds
 *.rom
+
+# local launcher config
+godot_path.txt
