@@ -347,6 +347,11 @@ func tick(dt: float) -> void:
 			spawning_card = true
 			spawn(0, float(foe["x"]), 0.5, 12.0, 0.2, 10.0, "buster")
 			spawning_card = false
+	if OS.get_cmdline_user_args().has("--duellock") and phase == "fight" and t > 1.9 and not struck:
+		struck = true
+		queue = ["widesword", "tide"]
+		toggle_lock()
+		play_next_card()
 	if demo_strike and phase == "fight" and not struck:
 		struck = true
 		locked = true
@@ -437,8 +442,9 @@ func toggle_lock() -> void:
 		return
 	if not locked and (queue.is_empty() or not MELEE.has(str(queue[0]))):
 		return   # silent: the status line already says lock-on is for sword cards
-	locked = not locked
-	popup(float(me["x"]), float(me["z"]), "LOCK-ON" if locked else "lock released", Color("ff5d5d") if locked else Color.WHITE)
+	locked = not locked   # the reticle and the status line already say "locked on": no popup for it
+	if not locked:
+		popup(float(me["x"]), float(me["z"]), "lock released", Color.WHITE)
 
 # The run ends on a result screen first, so it is clear whether you won or were deleted.
 func finish(won: bool) -> void:
@@ -1043,7 +1049,24 @@ func draw_arena() -> void:
 	gline(FIELD_X, FIELD_Z, FIELD_X, 30.0, Color(0.5, 0.9, 1.0, 0.30), 1.0)
 	gline(-FIELD_X, FIELD_Z * 0.5, FIELD_X, FIELD_Z * 0.5, Color(1, 1, 1, 0.75), 2.0)
 
+var text_rects: Array = []   # screen boxes of floating text this frame, so new text can avoid sitting on old text
+
+# Moves a box up until it no longer overlaps any text already placed this frame, then claims it.
+func place_text(rect: Rect2) -> Rect2:
+	for guard in 10:
+		var hit := false
+		for r in text_rects:
+			if rect.intersects(r):
+				hit = true
+				break
+		if not hit:
+			break
+		rect.position.y -= rect.size.y + 2.0
+	text_rects.append(rect)
+	return rect
+
 func draw_actors() -> void:
+	text_rects.clear()
 	draw_telegraph()
 	var e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
 	var list: Array = [{"z": float(foe["z"]), "k": "foe"}, {"z": float(me["z"]), "k": "me"}]
@@ -1101,7 +1124,11 @@ func draw_actors() -> void:
 	for pp in popups:
 		var p := proj(float(pp["x"]), float(pp["z"]))
 		var a := 1.0 - float(pp["t"]) / 1.1
-		draw_string(ThemeDB.fallback_font, Vector2(p.x - 80, p.y - (1.3 + float(pp["t"]) * 0.8) * p.z), str(pp["text"]), HORIZONTAL_ALIGNMENT_CENTER, 160, 20, Color(pp["color"], a))
+		var pf := ThemeDB.fallback_font
+		var tw := pf.get_string_size(str(pp["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		var base_y := p.y - (1.3 + float(pp["t"]) * 0.8) * p.z
+		var box := place_text(Rect2(p.x - tw * 0.5, base_y - 18.0, tw, 22.0))
+		draw_string(pf, Vector2(box.position.x, box.position.y + 18.0), str(pp["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(pp["color"], a))
 
 func meta(sheet_name: String) -> Dictionary:
 	if _meta.has(sheet_name):
@@ -1214,7 +1241,8 @@ func draw_reticle() -> void:
 			var corner := c + Vector2(sx * r, sy * r)
 			draw_line(corner, corner - Vector2(sx * r * 0.38, 0.0), col, 3.0)
 			draw_line(corner, corner - Vector2(0.0, sy * r * 0.38), col, 3.0)
-	draw_string(ThemeDB.fallback_font, Vector2(c.x - 40, c.y - r - 6), "LOCK-ON", HORIZONTAL_ALIGNMENT_CENTER, 80, 12, col)
+	var lab := place_text(Rect2(c.x - 30, c.y - r - 18, 60, 16))
+	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x - 10, lab.position.y + 13), "LOCK-ON", HORIZONTAL_ALIGNMENT_CENTER, 80, 12, col)
 
 # the slash arc of a sword card: sweeps across in front of the swinger
 func draw_slash(f: Dictionary, st: float, col: Color, mult: float = 1.0) -> void:
