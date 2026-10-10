@@ -424,30 +424,37 @@ func draw_defeated() -> void:
 	draw_shadow(float(me["x"]), mz, 0.34 * (1.0 - fall * 0.4))
 	draw_anim("duel_hero", "hurt", 0.3, float(me["x"]), mz, 0.0, Color(1.6 - fall * 0.6, 1.0, 1.0 + fall * 0.4, a), ME_SCALE, fall * 1.35, -0.22 * fall, sin(dead_t * 70.0) * 5.0 * clampf(1.0 - dead_t * 2.5, 0.0, 1.0))
 
-# The buster charge: a small flame held at the cannon hand, licking upward, not a clean circle.
+# The buster charge: a cyan EM-wave plume erupting from the left hand - fanned, wavy strands streaming up, no hard circle.
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
 	var s := p.z * ME_SCALE
-	var c := Vector2(p.x + 0.26 * s, p.y - 0.50 * s)     # the glove on the cannon arm, same depth as the body
-	var r := 3.5 + charge * 8.0
-	var flick := t * 17.0
-	var cols: Array = [Color(1.0, 0.32, 0.08, 0.55), Color(1.0, 0.62, 0.14, 0.75), Color(1.0, 0.95, 0.6, 0.95)]
-	var ks: Array = [1.0, 0.68, 0.38]
-	for layer in 3:
-		var k: float = ks[layer]
-		var pts := PackedVector2Array()
-		var n := 9
-		for i in n:
-			var a := TAU * float(i) / float(n)
-			var lick := 1.0 + 0.35 * sin(flick * (1.0 + 0.23 * float(i)) + float(i) * 2.1 + float(layer))
-			var up := maxf(0.0, -sin(a))     # tongues stretch upward
-			var rr := r * k * lick * (1.0 + 0.9 * up)
-			pts.append(c + Vector2(cos(a) * rr * 0.8, sin(a) * rr - up * r * 0.5 * k))
-		draw_colored_polygon(pts, cols[layer])
+	var c := Vector2(p.x - 0.25 * s, p.y - 0.50 * s)     # the left glove, same depth as the body
+	var base := 2.5 + charge * 4.0
+	var length := s * (0.28 + charge * 0.55)
+	draw_circle(c, base * 2.2, Color(0.35, 0.85, 1.0, 0.16 + 0.12 * charge))
+	var strands := 11
+	for k in strands:
+		var f := float(k) / float(strands - 1) - 0.5                 # -0.5 .. 0.5 across the fan
+		var fan := f * 1.15
+		var len_k := length * (0.65 + 0.35 * absf(sin(float(k) * 1.7 + 0.6)))
+		var amp := s * 0.035 * (0.6 + charge)
+		var prev := c
+		var segs := 12
+		for i in range(1, segs + 1):
+			var u := float(i) / float(segs)
+			var wob := sin(t * 7.0 - u * 6.5 + float(k) * 1.9) * amp * u
+			var ang := -PI * 0.5 + fan * (0.4 + u * 0.8)
+			var pt := c + Vector2(cos(ang), sin(ang)) * len_k * u + Vector2(wob, 0.0)
+			var fade := 1.0 - u
+			draw_line(prev, pt, Color(0.3, 0.8, 1.0, 0.45 * fade), 4.6 * fade + 0.8)
+			draw_line(prev, pt, Color(0.85, 1.0, 1.0, 0.9 * fade), 1.8 * fade + 0.4)
+			prev = pt
+	draw_circle(c, base, Color(0.7, 0.97, 1.0, 0.85))
+	draw_circle(c, base * 0.5, Color(1.0, 1.0, 1.0, 0.95))
 	if charge >= 1.0:
 		for i in 3:
 			var sp := fmod(t * 1.6 + float(i) * 0.33, 1.0)
-			draw_circle(c + Vector2(sin(t * 9.0 + float(i) * 2.0) * r * 0.6, -r * 0.8 - sp * r * 1.6), 1.6, Color(1.0, 0.85, 0.4, 1.0 - sp))
+			draw_circle(c + Vector2(sin(t * 9.0 + float(i) * 2.0) * s * 0.05, -length * (0.5 + sp)), 1.6, Color(0.8, 1.0, 1.0, 1.0 - sp))
 
 # ------------------------------------------------------------------ holographic shield and counter hits
 # Y raises a quick shield (about a second). It stops most shots, not waves or sword strikes, costs your buster
