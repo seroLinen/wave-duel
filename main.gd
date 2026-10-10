@@ -174,6 +174,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--musictest" in args:
+		run_musictest()
+		return
 	if "--padtest" in args:
 		run_padtest()
 		return
@@ -1334,4 +1337,16 @@ func run_padtest() -> void:
 	await pad_tap(JOY_BUTTON_Y)
 	print("top (Y) with no sword queued does nothing harmful: locked=", w.locked); ok = ok and not w.locked
 	print("PAD LAYOUT OK" if ok else "PAD LAYOUT BROKEN")
+	get_tree().quit()
+
+func run_musictest() -> void:
+	for tr in ["hub", "duel"]:
+		var st: AudioStream = music.find(tr)
+		print(tr, ": ", "not found" if st == null else "loaded, %.1f s, loops=%s" % [st.get_length(), (st as AudioStreamOggVorbis).loop])
+	music.play_track("duel")
+	await get_tree().create_timer(1.5).timeout
+	print("duel playing: ", music.player.playing, " | volume dB %.1f" % music.player.volume_db)
+	music.play_track("hub")
+	await get_tree().create_timer(2.5).timeout
+	print("switched to hub: ", music.current, " playing: ", music.player.playing)
 	get_tree().quit()

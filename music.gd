@@ -1,10 +1,10 @@
 extends Node
 # Background music. Plays looping .ogg files from audio/_local/ (hub.ogg, duel.ogg) if they exist, and stays silent if not.
 # That folder is git-ignored on purpose: anything committed to audio/ must be original or rights-cleared (see audio/README.md).
-# To ship music in the repo, put cleared files in audio/music/ and name them hub.ogg / duel.ogg there.
+# Anyone cloning the repo plays audio/music/ (cleared tracks) instead; your _local/ files override it on your machine.
 # M toggles the music (remembered in the save).
 
-const FOLDERS := ["res://audio/music/", "res://audio/_local/"]
+const FOLDERS := ["res://audio/_local/", "res://audio/music/"]   # your private tracks win; everyone else gets the public set
 const VOLUME_DB := -9.0
 const FADE := 0.7
 
