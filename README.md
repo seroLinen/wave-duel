@@ -50,8 +50,9 @@ the portal swells to fill your view, and past a ring on the floor you lose contr
 
 Re-render art (needs Python 3, Pillow, numpy): `python tools/anim_render.py` and `python tools/backdrop_render.py`.
 
-Controls (all rebindable under Esc > Controls): **A/D** move, **Space** release the buster, **Q** open Custom, **Enter** play the next card,
-**Down** lock on (when a sword card is next), **V / Y** shield, **Esc** menu, **F11** fullscreen. Controller works, including a Pro Controller through Steam.
+Controls (all rebindable under Esc > Controls, one keyboard key and one controller button per action): **A/D** move, **Space** release the buster,
+**Q** open Custom, **Enter** play the next card, **Down** lock on (when a sword card is next), **V** shield, **Esc** menu, **M** mute music, **F11** fullscreen.
+Controller: stick/D-pad move, **RB** fire, **LB** Custom, bottom button plays a card, right button shields, top button locks on. Pro Controller supported.
 
 ## Docs
 
