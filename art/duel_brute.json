@@ -1,0 +1,1 @@
+{"fw": 96, "world_h": 1.45, "feet": 0.9125, "rows": {"idle": {"row": 0, "n": 8, "fps": 6, "loop": true}, "attack": {"row": 1, "n": 4, "fps": 9, "loop": false}, "hurt": {"row": 2, "n": 3, "fps": 9, "loop": false}}}

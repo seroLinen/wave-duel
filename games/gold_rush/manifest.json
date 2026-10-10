@@ -1,0 +1,9 @@
+{
+	"id": "gold_rush",
+	"name": "Gold Rush",
+	"color": "f4a261",
+	"author": "hub prototype",
+	"movement": "topdown",
+	"abilities": ["shoot"],
+	"spawners": ["coins", "chasers"]
+}

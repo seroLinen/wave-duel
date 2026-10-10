@@ -1,0 +1,12 @@
+{
+	"id": "pulse_garden",
+	"name": "Pulse Garden",
+	"color": "2ec4b6",
+	"author": "hub prototype",
+	"script": "world.gd",
+	"essences": [
+		{"key": "echo", "name": "Echo", "color": "2ec4b6", "how": "orbs caught in your pulse"}
+	],
+	"earn_keys": ["echo"],
+	"boons": ["skin", "sprint", "bounty", "ghost", "greed", "short"]
+}

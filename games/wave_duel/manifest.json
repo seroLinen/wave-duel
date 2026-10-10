@@ -1,0 +1,12 @@
+{
+	"id": "wave_duel",
+	"name": "Wave Duel",
+	"color": "b5179e",
+	"author": "hub prototype",
+	"script": "world.gd",
+	"essences": [
+		{"key": "static", "name": "Static", "color": "ff8fab", "how": "cards played, hits landed"}
+	],
+	"earn_keys": ["static"],
+	"boons": ["skin", "sprint", "ghost", "greed"]
+}

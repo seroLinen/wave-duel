@@ -1,0 +1,23 @@
+# Godot
+.godot/
+*.translation
+export_presets.cfg
+*.tmp
+
+# working files, not part of the project
+shots/
+__pycache__/
+*.pyc
+_backups/
+
+# Audio policy: only original or rights-cleared audio belongs in this repo.
+# Raw material (anything ripped, converted or captured from a game or soundtrack) stays out.
+audio/_raw/
+audio/_unlicensed/
+*.nsf
+*.gsf
+*.minigsf
+*.spc
+*.gba
+*.nds
+*.rom
