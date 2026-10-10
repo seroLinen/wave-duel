@@ -9,6 +9,7 @@ const Plugins = preload("res://plugins.gd")
 const Hub3D = preload("res://hub3d.gd")
 const Cards = preload("res://cards.gd")
 const Binds = preload("res://binds.gd")
+const Music = preload("res://music.gd")
 
 enum S { HUB, ENTER, BRIDGE, PLAY, MASH, FOLDER }
 const W := 960.0
@@ -90,6 +91,7 @@ var warp_mat: ShaderMaterial
 var capture_label: Label
 var bind_mode := 0           # 0 off, 1 choosing an action, 2 listening for a button
 var bind_sel := 0
+var music: Node
 var bind_col := 0             # 0 = keyboard slot, 1 = controller slot
 var bind_last := ""
 var bind_note := ""
@@ -100,6 +102,8 @@ var overlay: Node2D            # draws the pause menu above everything (incl. th
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # crisp pixel sprites
+	music = Music.new()
+	add_child(music)
 	var layer := CanvasLayer.new()
 	layer.layer = 20
 	add_child(layer)
@@ -134,6 +138,7 @@ func _ready() -> void:
 	refresh_carts()
 	profile = Carts.load_profile()
 	Binds.load_from(profile.get("bindings", {}))
+	music.enabled = bool(profile.get("music", true))
 	Input.joy_connection_changed.connect(func(dev: int, on: bool):
 		write_log("controller %d %s: %s" % [dev, "CONNECTED" if on else "DISCONNECTED", Input.get_joy_name(dev) if on else ""]))
 	for d in Input.get_connected_joypads():
@@ -467,6 +472,11 @@ func _input(e: InputEvent) -> void:
 		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
+	if e.keycode == KEY_M and not pause_open and bind_mode == 0:
+		music.toggle()
+		profile["music"] = music.enabled
+		Carts.save_profile(profile)
+		return
 	if e.keycode == KEY_F11:
 		toggle_fullscreen()
 		return
@@ -649,6 +659,7 @@ func note_state() -> void:
 		write_log("state %s -> %s   (last input: %s)" % [S.keys()[seen_state] if seen_state >= 0 else "-", S.keys()[state], last_input])
 		seen_state = state
 		state_since = t
+		music.play_track("duel" if (state == S.PLAY and runner != null and str(runner.recipe.get("id", "")) == "wave_duel") else "hub")
 
 func write_log(line: String) -> void:
 	var f := FileAccess.open("user://input_log.txt", FileAccess.READ_WRITE if log_started else FileAccess.WRITE)

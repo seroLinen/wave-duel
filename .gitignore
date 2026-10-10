@@ -24,3 +24,6 @@ audio/_unlicensed/
 
 # local launcher config
 godot_path.txt
+
+# music kept on this machine only (not cleared for the public repo)
+audio/_local/
