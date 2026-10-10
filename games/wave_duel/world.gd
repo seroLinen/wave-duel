@@ -44,7 +44,7 @@ const CLEARED_TIME := 3.4        # breathing room between opponents
 const ENEMIES := [
 	{"name": "Hardhat Drone", "sheet": "duel_buzzcap", "scale": 1.5, "hp": 70, "speed": 1.2, "react": 0.45, "fire": 1.1, "kind": "drone"},
 	{"name": "Wall Brute", "sheet": "duel_brute", "scale": 1.3, "hp": 130, "speed": 0.8, "react": 0.6, "fire": 2.3, "kind": "brute"},
-	{"name": "Rival Navi", "sheet": "duel_rival", "scale": 1.05, "hp": 150, "speed": 1.6, "react": 0.28, "fire": 0.95, "kind": "rival"},
+	{"name": "Rival Navi", "sheet": "duel_rival", "scale": 1.05, "hp": 150, "speed": 1.6, "react": 0.28, "fire": 0.95, "kind": "rival", "arc": true},
 ]
 
 var bonus_hp := 0
@@ -159,7 +159,7 @@ func is_navi_round() -> bool:
 	return round_i >= ENEMIES.size() - 1
 
 func intro_length(i: int) -> float:
-	return 5.2 if i >= ENEMIES.size() - 1 else 1.7
+	return 6.8 if i >= ENEMIES.size() - 1 else 1.7
 
 func start_round() -> void:
 	var e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
@@ -561,6 +561,33 @@ func draw_lock_arrows(mz: float) -> void:
 				var cc := Color(col, a)
 				draw_line(Vector2(p.x - w, p.y), Vector2(p.x, p.y - h), cc, 3.0)
 				draw_line(Vector2(p.x, p.y - h), Vector2(p.x + w, p.y), cc, 3.0)
+
+# The opponent's meters worn as a rainbow arc over its head: the outer band is health (it empties from the right),
+# the thin inner band is its Custom gauge. It follows the body, so several opponents could each carry their own.
+func draw_foe_arc(e: Dictionary, fade: float) -> void:
+	var p := proj(float(foe["x"]), float(foe["z"]))
+	var md := meta(str(e["sheet"]))
+	var sz := p.z * float(md["world_h"]) * float(e["scale"])
+	var c := Vector2(p.x, p.y - sz * 0.80)
+	var r := clampf(sz * 0.26, 36.0, 72.0)
+	var frac := clampf(float(foe["hp"]) / float(foe["max"]), 0.0, 1.0)
+	var n := 36
+	var low := frac < 0.25 and int(t * 6.0) % 2 == 0
+	for i in n:
+		var a0 := PI + PI * float(i) / float(n)
+		var a1 := PI + PI * float(i + 1) / float(n)
+		draw_arc(c, r, a0, a1 + 0.02, 4, Color(0.02, 0.02, 0.08, 0.85 * fade), 13.0)            # backing
+		if float(i) / float(n) < frac:
+			var col := Color.from_hsv(0.0 + 0.78 * float(i) / float(n), 0.78, 1.0, fade)       # the rainbow, red to violet
+			draw_arc(c, r, a0, a1 + 0.02, 4, Color.WHITE if low else col, 9.0)
+	var gn := 24
+	for i in gn:
+		var a0 := PI + PI * float(i) / float(gn)
+		var a1 := PI + PI * float(i + 1) / float(gn)
+		var on := float(i) / float(gn) < foe_gauge
+		draw_arc(c, r - 10.0, a0, a1 + 0.02, 4, Color(1.0, 0.62, 0.11, fade) if on else Color(0.3, 0.2, 0.1, 0.5 * fade), 4.0)
+	var lab := place_text(Rect2(c.x - 50, c.y - r - 26, 100, 16))
+	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x, lab.position.y + 13), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 100, 12, Color(1, 1, 1, 0.85 * fade))
 
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
@@ -1000,88 +1027,99 @@ func _draw() -> void:
 	if recipe.is_empty():
 		return
 	var f := ThemeDB.fallback_font
+	if phase == "intro" and is_navi_round():
+		draw_navi_intro(f)
+		return
 	draw_arena()
 	draw_actors()
 	draw_hud(f)
-	if phase == "intro" and is_navi_round():
-		draw_intro(f)
 	if selecting:
 		draw_custom(f)
 
-# ------------------------------------------------------------------ opening cinematic
+# ------------------------------------------------------------------ opening cinematic (the Navi only)
+# A camera move through the scene, in the manner of a boss reveal: a wide pan across the field, then hard cuts to close-ups
+# of the boots, a gloved fist and the eyes (pre-rendered large by tools/intro_render.py), then the camera drops back into
+# the fight view and the banner slams in. The fight camera itself never moves.
 func ease_out(x: float) -> float:
 	x = clampf(x, 0.0, 1.0)
 	return 1.0 - pow(1.0 - x, 3.0)
 
-func draw_portrait(sheet_name: String, pose: String, at: float, center: Vector2, size: float, tint: Color) -> void:
-	var tex := sheet(sheet_name)
-	var md := meta(sheet_name)
-	if tex == null or md.is_empty():
-		return
-	var rows: Dictionary = md["rows"]
-	var r: Dictionary = rows[pose] if rows.has(pose) else rows["idle"]
-	var n := int(r["n"])
-	var idx := posmod(int(at * float(r["fps"])), n)
-	var fw := int(md["fw"])
-	draw_texture_rect_region(tex, Rect2(center.x - size * 0.5, center.y - size * 0.5, size, size), Rect2(idx * fw, int(r["row"]) * fw, fw, fw), tint)
+func ease_io(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
 
-func draw_intro(f: Font) -> void:
-	var e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
-	var boss := round_i >= ENEMIES.size() - 1
+# draws the arena and both fighters seen through a camera that looks at `pivot` (screen px) at `zoom`
+func draw_scene_cam(pivot: Vector2, zoom: float) -> void:
+	var centre := Vector2(W * 0.5, H * 0.5)
+	draw_set_transform_matrix(Transform2D(Vector2(zoom, 0), Vector2(0, zoom), centre - pivot * zoom))
+	draw_arena()
+	draw_actors()
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+func closeup_backdrop(u: float, dim: float) -> void:
+	bg("bg_sky", 0.0)
+	bg("bg_far", -30.0 + 60.0 * u, Color(0.8, 0.8, 0.95))
+	bg("bg_mid", -60.0 + 120.0 * u, Color(0.65, 0.65, 0.85))
+	draw_rect(Rect2(0, 0, W, H), Color(0.02, 0.02, 0.08, dim))
+
+func closeup(tex: Texture2D, cx: float, cy: float, w: float, tint := Color.WHITE) -> void:
+	var h := w * H / W
+	draw_texture_rect_region(tex, Rect2(0, 0, W, H), Rect2(cx - w * 0.5, cy - h * 0.5, w, h), tint)
+
+func draw_navi_intro(f: Font) -> void:
 	var tt := intro_total - phase_t
-	var kcol: Color = [Color("ffb703"), Color("ef476f"), Color("b5179e")][mini(round_i, 2)]
-	var a_in := clampf(tt / 0.3, 0.0, 1.0)
-	var a_out := clampf(phase_t / 0.35, 0.0, 1.0)
-	var a := minf(a_in, a_out)
-	var centre := Vector2(W * 0.5, 262.0)
-	# backdrop: dark wash, then rays turning slowly around the opponent
-	draw_rect(Rect2(0, 0, W, H), Color(0.02, 0.01, 0.06, 0.95 * a))
-	var rays := 22
-	for i in rays:
-		if i % 2 == 0:
-			continue
-		var a0 := TAU * float(i) / float(rays) + tt * (0.35 if not boss else 0.6)
-		var a1 := a0 + TAU / float(rays)
-		var far := 900.0
-		draw_colored_polygon(PackedVector2Array([centre, centre + Vector2(cos(a0), sin(a0)) * far, centre + Vector2(cos(a1), sin(a1)) * far]), Color(kcol, 0.14 * a))
-	# the opponent: swings in from the right, then zooms in while the view drifts left to right
-	var prog := clampf(tt / intro_total, 0.0, 1.0)
-	var slide := (1.0 - ease_out(tt / 0.6)) * 520.0
-	var pan := lerpf(-90.0, 90.0, prog) if boss else lerpf(-50.0, 50.0, prog)
-	var zoom := lerpf(0.78, 1.28, ease_out(prog))
-	var size := (330.0 if not boss else 360.0) * zoom * float(e["scale"]) / 1.3
-	var pc := centre + Vector2(pan + slide, -10.0 * sin(tt * 2.0))
-	draw_portrait(str(e["sheet"]), "idle", tt, pc + Vector2(8, 10), size, Color(0, 0, 0, 0.45 * a))     # shadow
-	draw_portrait(str(e["sheet"]), "idle", tt, pc, size, Color(1, 1, 1, a))
-	# letterbox bars with the text
-	var bar_in := ease_out(tt / 0.4) * (1.0 if phase_t > 0.3 else clampf(phase_t / 0.3, 0.0, 1.0))
-	var top_h := 78.0 * bar_in
-	var bot_h := 118.0 * bar_in
-	draw_rect(Rect2(0, 0, W, top_h), Color(0.01, 0.0, 0.04, 1.0))
-	draw_rect(Rect2(0, H - bot_h, W, bot_h), Color(0.01, 0.0, 0.04, 1.0))
-	draw_rect(Rect2(0, top_h - 3.0, W, 3.0), kcol)
-	draw_rect(Rect2(0, H - bot_h, W, 3.0), kcol)
-	if bar_in > 0.9:
-		if boss:
-			# warning stripes crawl along the top bar, and the label flashes
-			for i in range(-2, 22):
-				var x := float(i) * 56.0 + fmod(tt * 120.0, 56.0)
-				draw_colored_polygon(PackedVector2Array([Vector2(x, 0), Vector2(x + 28, 0), Vector2(x + 8, 22), Vector2(x - 20, 22)]), Color(1.0, 0.25, 0.25, 0.85))
-			var blink := 1.0 if int(tt * 4.0) % 2 == 0 else 0.35
-			draw_string(f, Vector2(0, 58), "FINAL OPPONENT", HORIZONTAL_ALIGNMENT_CENTER, W, 28, Color(1.0, 0.85, 0.85, blink))
-		else:
-			draw_string(f, Vector2(0, 52), "ROUND %d / %d" % [round_i + 1, ENEMIES.size()], HORIZONTAL_ALIGNMENT_CENTER, W, 26, Color(1, 1, 1, 0.9))
-		# name plate slides in from the left a moment later
-		var nx := (1.0 - ease_out((tt - 0.5) / 0.5)) * -700.0
-		var ty := H - bot_h
-		draw_string(f, Vector2(nx, ty + 62), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, W, 48, Color.WHITE)
-		draw_string(f, Vector2(-nx, ty + 96), "HP %d    SPEED %s" % [int(e["hp"]), "FAST" if float(e["speed"]) > 1.4 else ("SLOW" if float(e["speed"]) < 1.0 else "NORMAL")], HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(kcol, 0.95))
-	# white flash as it opens and as it hands over to the fight
-	var flash := maxf(clampf(1.0 - tt / 0.25, 0.0, 1.0), clampf(1.0 - phase_t / 0.25, 0.0, 1.0)) * 0.8
-	if flash > 0.0:
-		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, flash))
-	if tt > 1.6:
-		draw_string(f, Vector2(W - 190, H - bot_h - 10), "confirm: skip", HORIZONTAL_ALIGNMENT_RIGHT, 180, 12, Color(1, 1, 1, 0.4))
+	var tex := sheet("intro_rival")
+	var fp := proj(float(foe["x"]), float(foe["z"]))
+	var foe_pt := Vector2(fp.x, fp.y - fp.z * 0.7)
+	var me_pt := Vector2(proj(float(me["x"]), 0.0).x, proj(0.0, 0.0).y - 60.0)
+	if tt < 1.9:                                    # 1  wide: the view slides from your fighter across the field to the Navi
+		var u := ease_io(tt / 1.9)
+		draw_scene_cam(me_pt.lerp(foe_pt, u), lerpf(1.7, 1.35, u))
+	elif tt < 3.1 and tex != null:                  # 2  boots on the panel
+		var u := (tt - 1.9) / 1.2
+		closeup_backdrop(u, 0.55)
+		draw_rect(Rect2(0, 410, W, 130), Color(0.58, 0.6, 0.74))                # the panel
+		for gx in range(-6, 8):
+			draw_line(Vector2(W * 0.5 + gx * 130.0 * 0.5, 410), Vector2(W * 0.5 + gx * 330.0 * 0.5, H), Color(0.82, 0.18, 0.28), 4.0)
+		draw_rect(Rect2(0, 410, W, 6), Color(0.82, 0.18, 0.28))
+		closeup(tex, lerpf(150.0, 232.0, u), 330.0, lerpf(150.0, 128.0, u))
+	elif tt < 4.2 and tex != null:                  # 3  the gloved fist
+		var u := (tt - 3.1) / 1.1
+		closeup_backdrop(u, 0.6)
+		draw_circle(Vector2(W * 0.5, H * 0.5), 360.0 + 40.0 * sin(tt * 6.0), Color(1.0, 0.4, 0.3, 0.10))
+		closeup(tex, 134.0, lerpf(290.0, 252.0, u), lerpf(120.0, 104.0, u))
+	elif tt < 5.3 and tex != null:                  # 4  the eyes
+		var u := (tt - 4.2) / 1.1
+		closeup_backdrop(u, 0.62)
+		var rays := 18
+		for i in rays:
+			if i % 2 == 0:
+				continue
+			var a0 := TAU * float(i) / float(rays) + tt * 0.5
+			var a1 := a0 + TAU / float(rays)
+			draw_colored_polygon(PackedVector2Array([Vector2(W * 0.5, H * 0.45), Vector2(W * 0.5, H * 0.45) + Vector2(cos(a0), sin(a0)) * 900.0, Vector2(W * 0.5, H * 0.45) + Vector2(cos(a1), sin(a1)) * 900.0]), Color(1.0, 0.8, 0.3, 0.10))
+		closeup(tex, 190.0, lerpf(150.0, 134.0, u), lerpf(150.0, 104.0, u))
+	else:                                           # 5  back to the fight view, the camera settling, then the banner
+		var u := ease_out((tt - 5.3) / 1.2)
+		draw_scene_cam(foe_pt.lerp(Vector2(W * 0.5, H * 0.5), u), lerpf(2.3, 1.0, u))
+		if u > 0.55:
+			draw_hud(f)
+		var bt := tt - 5.9
+		if bt > 0.0:
+			var slide := (1.0 - ease_out(bt / 0.25)) * -W
+			var by := 246.0
+			var band := PackedVector2Array([Vector2(slide + 120, by), Vector2(slide + W - 120, by), Vector2(slide + W - 100, by + 52), Vector2(slide + 100, by + 52)])
+			draw_colored_polygon(band, Color(0.03, 0.02, 0.09, 0.94))
+			draw_polyline(PackedVector2Array([band[0], band[1], band[2], band[3], band[0]]), Color("ff5d73"), 3.0)
+			draw_colored_polygon(PackedVector2Array([Vector2(slide + 84, by + 26), Vector2(slide + 120, by + 4), Vector2(slide + 120, by + 48)]), Color("ff5d73"))
+			draw_colored_polygon(PackedVector2Array([Vector2(slide + W - 84, by + 26), Vector2(slide + W - 120, by + 4), Vector2(slide + W - 120, by + 48)]), Color("ff5d73"))
+			draw_string(f, Vector2(slide, by + 38), "BATTLE START", HORIZONTAL_ALIGNMENT_CENTER, W, 34, Color.WHITE)
+	# a brief white flash as it opens
+	var fl := clampf(1.0 - tt / 0.35, 0.0, 1.0)
+	if fl > 0.0:
+		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, fl))
+	if tt > 1.6 and tt < 5.2:
+		draw_string(f, Vector2(W - 190, H - 12), "confirm: skip", HORIZONTAL_ALIGNMENT_RIGHT, 180, 12, Color(1, 1, 1, 0.4))
 
 func bg(layer: String, dx: float, tint: Color = Color.WHITE) -> void:
 	var tx := sheet(layer)
@@ -1172,6 +1210,8 @@ func draw_actors() -> void:
 				draw_shadow(float(foe["x"]), fz, 0.5)
 				draw_anim(str(e["sheet"]), foe_pose, t - foe_pose_t0, float(foe["x"]), fz, 0.0, tint, float(e["scale"]), clampf(foe_vx * 0.04, -0.14, 0.14), 0.014 * sin(t * 2.1 + 1.0) - (0.05 if foe_pose == "attack" else 0.0), sin(t * 90.0) * 4.0 * clampf(foe_hurt_t / 0.28, 0.0, 1.0))
 				draw_shield(foe, fz, float(e["scale"]))
+				if bool(e.get("arc", false)) and phase != "intro":
+					draw_foe_arc(e, fade)
 				if locked:
 					draw_reticle()
 				if not (foe["strike"] as Dictionary).is_empty() and int((foe["strike"] as Dictionary)["ph"]) == 1:
@@ -1467,11 +1507,12 @@ func draw_hud(f: Font) -> void:
 	var plate := Color(0.03, 0.02, 0.09, 0.96)
 	# top: opponent plate (solid, so the skyline never fights the text)
 	hud_text(f, "title", "Wave Duel  -  beaten %d / %d" % [int(score), int(goal)], Color(1, 1, 1, 0.85), 14)
-	draw_rect(hud_rect("foe_plate"), plate)
-	draw_rect(hud_rect("foe_plate"), Color(1, 1, 1, 0.2), false, 1.0)
-	hud_text(f, "foe_name", str(e["name"]), Color.WHITE, 18, HORIZONTAL_ALIGNMENT_CENTER)
-	hud_bar("foe_hp", float(foe["hp"]) / float(foe["max"]), Color("e63946"))
-	hud_bar("foe_gauge", foe_gauge, Color("ff9f1c"))   # the opponent's Custom gauge, so tempo is visible
+	if not bool(e.get("arc", false)):     # opponents that wear their meter as an arc over their head skip the plate
+		draw_rect(hud_rect("foe_plate"), plate)
+		draw_rect(hud_rect("foe_plate"), Color(1, 1, 1, 0.2), false, 1.0)
+		hud_text(f, "foe_name", str(e["name"]), Color.WHITE, 18, HORIZONTAL_ALIGNMENT_CENTER)
+		hud_bar("foe_hp", float(foe["hp"]) / float(foe["max"]), Color("e63946"))
+		hud_bar("foe_gauge", foe_gauge, Color("ff9f1c"))   # the opponent's Custom gauge, so tempo is visible
 	var parts: Array = []
 	for k in essence:
 		parts.append("%s %d" % [k, essence[k]])
