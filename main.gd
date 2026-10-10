@@ -164,6 +164,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--shieldtest" in args:
+		run_shieldtest()
+		return
 	if "--flowtest" in args:
 		run_flowtest()
 		return
@@ -1162,4 +1165,31 @@ func run_flowtest() -> void:
 				runner.queue_free()
 				runner = null
 	print("FLOW OK" if ok else "FLOW BROKEN")
+	get_tree().quit()
+
+# Presses every key that should raise the shield (with the saved bindings) and reports whether it went up.
+func run_shieldtest() -> void:
+	var idx := 0
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	print("shield binds: ", Binds.shown("shield"))
+	start_play(carts[idx], false)
+	await get_tree().create_timer(2.3).timeout
+	for b in Binds.all_for("shield"):
+		runner.guard_t = 0.0
+		runner.guard_cd = 0.0
+		var ev: InputEvent
+		if str(b["t"]) == "key":
+			ev = InputEventKey.new()
+			ev.keycode = int(b["c"])
+		elif str(b["t"]) == "joy":
+			ev = InputEventJoypadButton.new()
+			ev.button_index = int(b["c"])
+		else:
+			continue
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().create_timer(0.2).timeout
+		print("  ", Binds.short(b), " -> phase=%s guard_t=%.2f cd=%.2f" % [runner.phase, runner.guard_t, runner.guard_cd])
 	get_tree().quit()

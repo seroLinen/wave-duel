@@ -61,7 +61,7 @@ static func hit(b: Dictionary, e: InputEvent) -> bool:
 		"mouse": return e is InputEventMouseButton and e.pressed and e.button_index == int(b["c"])
 	return false
 
-const ADDITIVE := ["confirm", "menu"]   # their built-in keys always keep working
+const ADDITIVE := ["confirm", "menu", "shield"]   # their built-in keys always keep working
 
 # Once you set a button for an action, those buttons are the only ones it uses (so two actions can
 # no longer share a default by accident). Backspace in the Controls screen restores the defaults.
