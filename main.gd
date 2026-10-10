@@ -11,7 +11,7 @@ const Cards = preload("res://cards.gd")
 const Binds = preload("res://binds.gd")
 const Music = preload("res://music.gd")
 
-enum S { HUB, ENTER, BRIDGE, PLAY, MASH, FOLDER }
+enum S { HUB, ENTER, BRIDGE, PLAY, MASH, FOLDER, TITLE }
 const W := 960.0
 const H := 540.0
 const MAX_CARTS := 15
@@ -92,6 +92,14 @@ var capture_label: Label
 var bind_mode := 0           # 0 off, 1 choosing an action, 2 listening for a button
 var bind_sel := 0
 var music: Node
+# ---- title / boot (a splash or two, the logo, PRESS START, then the menu)
+const STUDIO := "seroLinen"            # shown on the second splash: change this to your own name
+const TITLE_AT := 6.0                  # seconds of splash before the title screen appears
+var title_t := 0.0
+var title_menu := false
+var title_sel := 0
+var title_confirm_new := false
+var art_cache := {}
 var bind_col := 0             # 0 = keyboard slot, 1 = controller slot
 var bind_last := ""
 var bind_note := ""
@@ -175,6 +183,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--titletest" in args:
+		run_titletest()
+		return
 	if "--elementtest" in args:
 		run_elementtest()
 		return
@@ -217,6 +228,15 @@ func _ready() -> void:
 		start_play(carts[start], true)
 	elif start == -2:
 		open_mash()
+	if args.is_empty():
+		enter_title()
+	if "--title" in args:
+		enter_title()
+		for a in args:
+			if a.begins_with("--titlet="):
+				title_t = float(a.substr(9))
+		if "--titlemenu" in args:
+			title_menu = true
 	if "--folderdemo" in args:
 		state = S.FOLDER
 	if "--controlsdemo" in args:
@@ -396,7 +416,7 @@ func pad_key(b: int) -> int:
 		JOY_BUTTON_B:
 			# A Pro Controller's right-hand button arrives as "B". On the Bridge it is confirm, never back
 			# (it used to kick you out of the boon screen); Esc / the pause menu still leave.
-			if state == S.BRIDGE and not pause_open:
+			if (state == S.BRIDGE or state == S.TITLE) and not pause_open:
 				return KEY_E
 			return KEY_ESCAPE if (state != S.PLAY or pause_open) else 0   # back (B shoots in games)
 		JOY_BUTTON_START, JOY_BUTTON_BACK: return KEY_TAB   # menu
@@ -647,7 +667,10 @@ func pause_key(k: int) -> void:
 					bind_note = "%s is back to its defaults" % Binds.ACTIONS[bind_sel]["label"]
 				bind_note_t = 4.0
 				save_binds()
-			KEY_ESCAPE, KEY_TAB: bind_mode = 0
+			KEY_ESCAPE, KEY_TAB:
+				bind_mode = 0
+				if state == S.TITLE:
+					close_pause()
 		return
 	var n := pause_items().size()
 	match k:
@@ -692,7 +715,12 @@ func note_state() -> void:
 		write_log("state %s -> %s   (last input: %s)" % [S.keys()[seen_state] if seen_state >= 0 else "-", S.keys()[state], last_input])
 		seen_state = state
 		state_since = t
-		music.play_track("duel" if (state == S.PLAY and runner != null and str(runner.recipe.get("id", "")) == "wave_duel") else "hub")
+		var want := "hub"
+		if state == S.TITLE:
+			want = "title" if music.find("title") != null else "hub"
+		elif state == S.PLAY and runner != null and str(runner.recipe.get("id", "")) == "wave_duel":
+			want = "duel"
+		music.play_track(want)
 
 func write_log(line: String) -> void:
 	var f := FileAccess.open("user://input_log.txt", FileAccess.READ_WRITE if log_started else FileAccess.WRITE)
@@ -742,6 +770,8 @@ func on_key(k: int) -> void:
 			mash_key(k)
 		S.FOLDER:
 			folder_key(k)
+		S.TITLE:
+			title_key(k)
 
 func mash_key(k: int) -> void:
 	if k == KEY_ESCAPE:
@@ -781,6 +811,8 @@ func mash_key(k: int) -> void:
 # ---------- hub ----------
 func _process(dt: float) -> void:
 	t += dt
+	if state == S.TITLE:
+		title_t += dt
 	note_state()
 	msg_t = maxf(0.0, msg_t - dt)
 	bind_note_t = maxf(0.0, bind_note_t - dt)
@@ -879,6 +911,9 @@ func _draw() -> void:
 	if state == S.PLAY:
 		return
 	var f := ThemeDB.fallback_font
+	if state == S.TITLE:
+		draw_title(f)
+		return
 	if state == S.BRIDGE:
 		draw_bridge(f)
 		if fade > 0.0:
@@ -1509,4 +1544,190 @@ func run_elementtest() -> void:
 	print("after clearing the opponent: phase=%s queue=%d gauge=%.2f charge=%.2f cards in folder %d (was %d)" % [w.phase, w.queue.size(), w.gauge, w.charge, after, folder_size])
 	ok = ok and w.phase == "cleared" and w.queue.is_empty() and w.gauge == 0.0 and w.charge == 0.0 and after == folder_size - 0 + 0
 	print("ELEMENTS OK" if ok else "ELEMENTS BROKEN")
+	get_tree().quit()
+
+# ================================================================== title / boot
+func enter_title() -> void:
+	state = S.TITLE
+	title_t = 0.0
+	title_menu = false
+	title_sel = 0
+	title_confirm_new = false
+
+func has_save() -> bool:
+	return FileAccess.file_exists(Carts.PROFILE_PATH) and (not (profile["stats"] as Dictionary).is_empty() or not (profile["wallet"] as Dictionary).is_empty())
+
+func title_items() -> Array:
+	var items: Array = []
+	if has_save():
+		items.append("CONTINUE")
+	items.append("NEW GAME")
+	items.append("CONTROLS")
+	items.append("QUIT")
+	return items
+
+func art_tex(name: String) -> Texture2D:
+	if art_cache.has(name):
+		return art_cache[name]
+	var tex: Texture2D = null
+	for path in ["user://art/%s.png" % name, "res://art/%s.png" % name]:
+		if FileAccess.file_exists(path):
+			var img := Image.load_from_file(path)
+			if img:
+				tex = ImageTexture.create_from_image(img)
+				break
+	art_cache[name] = tex
+	return tex
+
+func start_hub_from_title() -> void:
+	state = S.HUB
+	captured = -1
+	armed = true
+	fade_col = Color(0, 0, 0)
+	fade = 1.0
+
+func title_key(k: int) -> void:
+	var confirm := k == KEY_E or k == KEY_ENTER or k == KEY_SPACE or k == KEY_K
+	if title_t < TITLE_AT:                      # still in the splash: any confirm skips to the title
+		if confirm and title_t > 0.6:
+			title_t = TITLE_AT
+		return
+	if not title_menu:
+		if confirm:
+			title_menu = true
+			title_sel = 0
+		return
+	var items := title_items()
+	if title_confirm_new:                       # "this replaces your save": confirm again, or back out
+		if confirm:
+			var keep_b = profile.get("bindings", {})
+			var keep_m = profile.get("music", true)
+			var keep_bb = profile.get("both_bumpers", true)
+			profile = Carts.fresh_profile()
+			profile["bindings"] = keep_b
+			profile["music"] = keep_m
+			profile["both_bumpers"] = keep_bb
+			Carts.save_profile(profile)
+			title_confirm_new = false
+			start_hub_from_title()
+		elif k == KEY_ESCAPE:
+			title_confirm_new = false
+		return
+	match k:
+		KEY_W, KEY_UP: title_sel = (title_sel - 1 + items.size()) % items.size()
+		KEY_S, KEY_DOWN: title_sel = (title_sel + 1) % items.size()
+		KEY_ESCAPE: title_menu = false
+		_:
+			if not confirm:
+				return
+			match str(items[title_sel]):
+				"CONTINUE": start_hub_from_title()
+				"NEW GAME":
+					if has_save():
+						title_confirm_new = true
+					else:
+						start_hub_from_title()
+				"CONTROLS":
+					open_pause()
+					bind_mode = 1
+					bind_sel = 0
+				"QUIT": get_tree().quit()
+
+func splash_alpha(tt: float, t0: float, t1: float) -> float:
+	return clampf(minf((tt - t0) / 0.5, (t1 - tt) / 0.5), 0.0, 1.0)
+
+func draw_title(f: Font) -> void:
+	var tt := title_t
+	draw_rect(Rect2(0, 0, W, H), Color(0.01, 0.0, 0.04))
+	if tt < TITLE_AT:
+		# 1 a white flash as the screen wakes
+		# 2 "made with Godot"   3 who made it   (any confirm skips ahead)
+		var a1 := splash_alpha(tt, 0.4, 2.9)
+		if a1 > 0.0:
+			draw_string(f, Vector2(0, 252), "made with", HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color(1, 1, 1, 0.55 * a1))
+			draw_string(f, Vector2(0, 300), "Godot Engine", HORIZONTAL_ALIGNMENT_CENTER, W, 44, Color(1, 1, 1, a1))
+		var a2 := splash_alpha(tt, 3.2, 5.7)
+		if a2 > 0.0:
+			draw_string(f, Vector2(0, 252), "an original game by", HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color(1, 1, 1, 0.55 * a2))
+			draw_string(f, Vector2(0, 306), STUDIO, HORIZONTAL_ALIGNMENT_CENTER, W, 54, Color("ffd166").lerp(Color.WHITE, 0.4) * Color(1, 1, 1, a2))
+		var fl := clampf(1.0 - tt / 0.35, 0.0, 1.0)
+		if fl > 0.0:
+			draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, fl))
+		return
+	var u := tt - TITLE_AT
+	var bgfade := clampf(u / 0.7, 0.0, 1.0)
+	# the dusk skyline, drifting slowly; a few light streaks slide across it
+	var drift := sin(tt * 0.25) * 26.0
+	for layer in [["bg_sky", 0.0, Color.WHITE], ["bg_clouds", drift * 1.6, Color(1, 1, 1, 0.9)], ["bg_far", drift * 0.8, Color(0.84, 0.84, 0.92)], ["bg_mid", drift * 1.3, Color(0.8, 0.8, 0.9)], ["bg_near", drift * 2.0, Color(0.76, 0.76, 0.86)]]:
+		var tx := art_tex(str(layer[0]))
+		if tx != null:
+			draw_texture_rect(tx, Rect2(-80.0 + float(layer[1]), 0.0, 1120.0, 540.0), false, Color(layer[2]) * Color(1, 1, 1, bgfade))
+	for i in 12:
+		var sp := 40.0 + float(i % 5) * 22.0
+		var x := fposmod(float(i) * 197.0 - tt * sp, W + 420.0) - 210.0
+		var y := 40.0 + fposmod(float(i) * 83.0, 250.0)
+		draw_line(Vector2(x, y), Vector2(x + 90.0 + float(i % 4) * 40.0, y), Color(1, 1, 1, 0.16 * bgfade), 2.0)
+	draw_rect(Rect2(0, 330, W, 210), Color(0.01, 0.0, 0.05, 0.55 * bgfade))     # a calm dark base for the menu text
+	# the logo drops in with a small impact flash
+	var logo := art_tex("title_logo")
+	var land := clampf((u - 0.3) / 0.45, 0.0, 1.0)
+	if logo != null and land > 0.0:
+		var sc := lerpf(1.7, 1.0, 1.0 - pow(1.0 - land, 3.0))
+		var w := 700.0 * sc
+		var h := w * float(logo.get_height()) / float(logo.get_width())
+		draw_texture_rect(logo, Rect2(W * 0.5 - w * 0.5, 150.0 - h * 0.5 + (1.0 - land) * -30.0, w, h), false, Color(1, 1, 1, land))
+		draw_string(f, Vector2(0, 232), "C A R T R I D G E   H U B", HORIZONTAL_ALIGNMENT_CENTER, W, 20, Color(1, 1, 1, 0.75 * land))
+	var impact := clampf(1.0 - absf(u - 0.75) / 0.18, 0.0, 1.0) * 0.5
+	if impact > 0.0:
+		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, impact))
+	if u > 1.0:
+		if not title_menu:
+			if int(tt * 2.2) % 2 == 0 or u < 1.6:
+				draw_string(f, Vector2(0, 400), "PRESS START", HORIZONTAL_ALIGNMENT_CENTER, W, 34, Color.WHITE)
+			draw_string(f, Vector2(0, 432), "Enter / A", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.5))
+		else:
+			var items := title_items()
+			for i in items.size():
+				var y := 372.0 + float(i) * 40.0
+				var on := i == title_sel
+				if on:
+					draw_rect(Rect2(W * 0.5 - 150, y - 28, 300, 36), Color(1, 1, 1, 0.14))
+					draw_rect(Rect2(W * 0.5 - 150, y - 28, 300, 36), Color("ffd166"), false, 2.0)
+				draw_string(f, Vector2(0, y), str(items[i]), HORIZONTAL_ALIGNMENT_CENTER, W, 24, Color.WHITE if on else Color(1, 1, 1, 0.6))
+			if title_confirm_new:
+				draw_rect(Rect2(160, 200, 640, 140), Color(0.03, 0.02, 0.09))
+				draw_rect(Rect2(160, 200, 640, 140), Color("ff5d73"), false, 3.0)
+				draw_string(f, Vector2(0, 252), "Start over?", HORIZONTAL_ALIGNMENT_CENTER, W, 30, Color.WHITE)
+				draw_string(f, Vector2(0, 286), "This replaces your saved progress.", HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(1, 1, 1, 0.8))
+				draw_string(f, Vector2(0, 318), "Confirm: Enter / A      Cancel: Esc", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
+	draw_string(f, Vector2(0, H - 16), "(c) 2026 %s.  An original game - not affiliated with or endorsed by Capcom." % STUDIO, HORIZONTAL_ALIGNMENT_CENTER, W, 12, Color(1, 1, 1, 0.45 * bgfade))
+
+# The boot flow: splash is skippable, PRESS START opens the menu, CONTINUE keeps the save, NEW GAME asks first and then wipes it.
+func run_titletest() -> void:
+	var ok := true
+	profile["wallet"] = {"Static": 7}
+	profile["stats"] = {"wave_duel": {"best": 3.0, "runs": 2, "wins": 1}}
+	Carts.save_profile(profile)
+	enter_title()
+	title_key(KEY_ENTER)
+	print("splash ignores a confirm in the first moments: t=%.1f still splash=%s" % [title_t, title_t < TITLE_AT]); ok = ok and title_t < TITLE_AT
+	title_t = 1.0
+	title_key(KEY_ENTER)
+	print("a later confirm skips to the title: ", title_t >= TITLE_AT); ok = ok and title_t >= TITLE_AT
+	title_key(KEY_ENTER)
+	print("PRESS START opens the menu: ", title_menu, " items=", title_items()); ok = ok and title_menu and title_items()[0] == "CONTINUE"
+	title_key(KEY_ENTER)
+	print("CONTINUE goes to the hub and keeps the save: state=", S.keys()[state], " wallet=", profile["wallet"]); ok = ok and state == S.HUB and int(profile["wallet"].get("Static", 0)) == 7
+	enter_title()
+	title_t = TITLE_AT + 2.0
+	title_key(KEY_ENTER)
+	title_key(KEY_S)
+	title_key(KEY_ENTER)
+	print("NEW GAME asks before wiping: confirm_prompt=", title_confirm_new, " save still there=", int(profile["wallet"].get("Static", 0)) == 7); ok = ok and title_confirm_new and int(profile["wallet"].get("Static", 0)) == 7
+	title_key(KEY_ESCAPE)
+	print("Esc cancels it: ", not title_confirm_new); ok = ok and not title_confirm_new
+	title_key(KEY_ENTER)
+	title_key(KEY_ENTER)
+	print("confirming starts fresh: state=", S.keys()[state], " wallet=", profile["wallet"], " cards=", (profile["cards"] as Dictionary).size()); ok = ok and state == S.HUB and (profile["wallet"] as Dictionary).is_empty()
+	print("TITLE FLOW OK" if ok else "TITLE FLOW BROKEN")
 	get_tree().quit()

@@ -93,6 +93,9 @@ static func earns(r: Dictionary) -> Array:
 		out.append(ESSENCE[s])
 	return out
 
+static func fresh_profile() -> Dictionary:
+	return {"wallet": {}, "stats": {}, "cards": Cards.starter_cards(), "folder": Cards.starter_folder(), "bindings": {}, "bindings_v": 4, "cards_v": 2, "show_retired": false, "music": true, "both_bumpers": true}
+
 static func load_profile() -> Dictionary:
 	var prof := {"wallet": {}, "stats": {}, "cards": Cards.starter_cards(), "folder": Cards.starter_folder(), "bindings": {}, "bindings_v": 4, "cards_v": 2, "show_retired": false}
 	if FileAccess.file_exists(PROFILE_PATH):
