@@ -562,32 +562,38 @@ func draw_lock_arrows(mz: float) -> void:
 				draw_line(Vector2(p.x - w, p.y), Vector2(p.x, p.y - h), cc, 3.0)
 				draw_line(Vector2(p.x, p.y - h), Vector2(p.x + w, p.y), cc, 3.0)
 
-# The opponent's meters worn as a rainbow arc over its head: the outer band is health (it empties from the right),
-# the thin inner band is its Custom gauge. It follows the body, so several opponents could each carry their own.
+# The opponent's meters worn as a quiet arc over its head: the outer band is health (it empties from the right, off-white,
+# warming to amber and then red as it drops), the thin inner band is its Custom gauge. It follows the body, so several
+# opponents could each carry their own.
 func draw_foe_arc(e: Dictionary, fade: float) -> void:
 	var p := proj(float(foe["x"]), float(foe["z"]))
 	var md := meta(str(e["sheet"]))
 	var sz := p.z * float(md["world_h"]) * float(e["scale"])
 	var c := Vector2(p.x, p.y - sz * 0.80)
-	var r := clampf(sz * 0.26, 36.0, 72.0)
+	var r := clampf(sz * 0.24, 32.0, 66.0)
 	var frac := clampf(float(foe["hp"]) / float(foe["max"]), 0.0, 1.0)
+	var col := Color(0.93, 0.95, 1.0, 0.92 * fade)
+	if frac < 0.5:
+		col = Color(1.0, 0.78, 0.32, 0.95 * fade)
+	if frac < 0.25:
+		col = Color(1.0, 0.36, 0.36, (1.0 if int(t * 6.0) % 2 == 0 else 0.6) * fade)
 	var n := 36
-	var low := frac < 0.25 and int(t * 6.0) % 2 == 0
 	for i in n:
 		var a0 := PI + PI * float(i) / float(n)
 		var a1 := PI + PI * float(i + 1) / float(n)
-		draw_arc(c, r, a0, a1 + 0.02, 4, Color(0.02, 0.02, 0.08, 0.85 * fade), 13.0)            # backing
+		draw_arc(c, r, a0, a1 + 0.02, 4, Color(0.02, 0.02, 0.08, 0.55 * fade), 9.0)             # backing, so it reads on any sky
 		if float(i) / float(n) < frac:
-			var col := Color.from_hsv(0.0 + 0.78 * float(i) / float(n), 0.78, 1.0, fade)       # the rainbow, red to violet
-			draw_arc(c, r, a0, a1 + 0.02, 4, Color.WHITE if low else col, 9.0)
+			draw_arc(c, r, a0, a1 + 0.02, 4, col, 5.0)
 	var gn := 24
 	for i in gn:
 		var a0 := PI + PI * float(i) / float(gn)
 		var a1 := PI + PI * float(i + 1) / float(gn)
-		var on := float(i) / float(gn) < foe_gauge
-		draw_arc(c, r - 10.0, a0, a1 + 0.02, 4, Color(1.0, 0.62, 0.11, fade) if on else Color(0.3, 0.2, 0.1, 0.5 * fade), 4.0)
-	var lab := place_text(Rect2(c.x - 50, c.y - r - 26, 100, 16))
-	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x, lab.position.y + 13), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 100, 12, Color(1, 1, 1, 0.85 * fade))
+		if float(i) / float(gn) < foe_gauge:
+			draw_arc(c, r - 8.0, a0, a1 + 0.02, 4, Color(1.0, 0.62, 0.11, 0.9 * fade), 3.0)
+		else:
+			draw_arc(c, r - 8.0, a0, a1 + 0.02, 4, Color(1, 1, 1, 0.14 * fade), 2.0)
+	var lab := place_text(Rect2(c.x - 50, c.y - r - 22, 100, 14))
+	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x, lab.position.y + 11), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 1, 1, 0.6 * fade))
 
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
