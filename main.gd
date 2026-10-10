@@ -133,6 +133,10 @@ func _ready() -> void:
 	refresh_carts()
 	profile = Carts.load_profile()
 	Binds.load_from(profile.get("bindings", {}))
+	Input.joy_connection_changed.connect(func(dev: int, on: bool):
+		write_log("controller %d %s: %s" % [dev, "CONNECTED" if on else "DISCONNECTED", Input.get_joy_name(dev) if on else ""]))
+	for d in Input.get_connected_joypads():
+		write_log("controller %d already connected at start: %s" % [d, Input.get_joy_name(d)])
 	refresh_carts()
 	var args := OS.get_cmdline_user_args()
 	var start := -1
