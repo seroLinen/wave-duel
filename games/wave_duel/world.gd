@@ -36,6 +36,7 @@ const PERFECT_T := 0.16          # a shot that lands this soon after raising it 
 const PIERCE := ["wave", "tide"]  # the shield cannot stop these outright (nor sword strikes: body contact) but takes the edge off
 const PIERCE_KEEP := 0.5         # share of a piercing hit that gets through a raised shield
 const COUNTER_BONUS := 10.0
+const CLEARED_TIME := 3.4        # breathing room between opponents
 
 const ENEMIES := [
 	{"name": "Hardhat Drone", "sheet": "duel_buzzcap", "scale": 1.5, "hp": 70, "speed": 1.2, "react": 0.45, "fire": 1.1, "kind": "drone"},
@@ -48,6 +49,10 @@ var t := 0.0
 var round_i := 0
 var phase := "intro"          # intro | fight | cleared
 var phase_t := 0.0
+var intro_total := 1.7   # length of this round's opening cinematic
+var next_called := false
+var music_ref: Node
+signal sting(name: String)
 var me := {}
 var foe := {}
 var shots: Array = []
@@ -81,6 +86,7 @@ var prev_foe_x := 0.0
 var result_t := 0.0
 var result_won := false
 var result_pending := false
+var result_t_total := 2.8
 var dead_t := 0.0      # how long you have been down (defeat animation)
 var shoot_t := 0.0
 var cast_t := 0.0
@@ -131,11 +137,24 @@ func setup(r: Dictionary, start_boons: Array = []) -> void:
 		gauge = 1.0
 	if demo_custom:
 		gauge = 1.0
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--round="):
+			round_i = clampi(int(a.substr(8)), 0, ENEMIES.size() - 1)
 	start_round()
 
 func make_fighter(hp: int, z: float) -> Dictionary:
 	return {"side": 0, "strike": {}, "mw": 0.0, "mw_id": "", "mw_aim": 0.0, "x": 0.0, "z": z, "hp": float(hp), "max": float(hp), "shield": 0.0, "shield_t": 0.0, "haste_t": 0.0,
 		"frozen_t": 0.0, "flash": 0.0, "tx": 0.0, "react_t": 0.6, "fire_t": 1.6, "tele": 0.0, "gat": 0, "gat_t": 0.0, "gat_card": false, "spread": false}
+
+func set_music(m: Node) -> void:
+	music_ref = m
+
+# Only the last opponent (the Navi) gets the full cinematic; the others just get a short round banner.
+func is_navi_round() -> bool:
+	return round_i >= ENEMIES.size() - 1
+
+func intro_length(i: int) -> float:
+	return 5.2 if i >= ENEMIES.size() - 1 else 1.7
 
 func start_round() -> void:
 	var e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
@@ -148,9 +167,13 @@ func start_round() -> void:
 	foe_selecting = 0.0
 	shots.clear()
 	phase = "intro"
-	phase_t = 1.7
-	banner = "ROUND %d   %s" % [round_i + 1, e["name"]]
-	banner_t = 1.7
+	intro_total = intro_length(round_i)
+	phase_t = intro_total
+	next_called = false
+	banner_t = 0.0
+	if not is_navi_round():
+		banner = "ROUND %d   %s" % [round_i + 1, e["name"]]
+		banner_t = intro_total
 
 # ------------------------------------------------------------------ input
 func _input(e: InputEvent) -> void:
@@ -184,6 +207,12 @@ func card_step(d: int) -> void:
 	cur = clampi(cur + d, 0, hand.size() - 1)
 
 func handle_key(k: int) -> void:
+	if phase == "intro" and is_navi_round() and k == KEY_ENTER and intro_total - phase_t > 1.6:
+		phase_t = minf(phase_t, 0.4)       # confirm skips the rest of an opening you have already seen
+		return
+	if phase == "result" and k == KEY_ENTER and result_t < 7.0 and result_t_total - result_t > 2.0:
+		result_t = 0.0       # confirm leaves the result screen once you have read it
+		return
 	if phase != "fight":
 		return
 	if selecting:
@@ -338,8 +367,15 @@ func tick(dt: float) -> void:
 		phase_t -= wdt
 		if phase_t <= 0.0:
 			phase = "fight"
+			if is_navi_round():
+				banner = "FIGHT!"
+				banner_t = 0.9
 	elif phase == "cleared":
 		phase_t -= wdt
+		if phase_t < 1.3 and not next_called and round_i + 1 < ENEMIES.size():
+			next_called = true
+			banner = "NEXT   %s" % ENEMIES[round_i + 1]["name"]
+			banner_t = 1.3
 		if phase_t <= 0.0:
 			round_i += 1
 			me["hp"] = minf(float(me["max"]), float(me["hp"]) + 30.0)
@@ -411,9 +447,15 @@ func finish(won: bool) -> void:
 	result_pending = true
 	result_won = won
 	result_t = 2.8
+	result_t_total = 2.8
+	if won:
+		sting.emit("victory")
+		if music_ref != null:
+			result_t = clampf(float(music_ref.sting_length("victory")) + 0.6, 2.8, 9.0)
+	result_t_total = result_t
 	phase = "result"
 	banner = "ALL OPPONENTS DELETED" if won else "YOU WERE DELETED"
-	banner_t = 2.8
+	banner_t = result_t
 	shots.clear()
 	locked = false
 
@@ -572,9 +614,10 @@ func fight_step(dt: float) -> void:
 		counter_hit()
 	if float(foe["hp"]) <= 0.0:
 		phase = "cleared"
-		phase_t = 1.9
+		phase_t = CLEARED_TIME
 		banner = "DELETED!"
 		banner_t = 1.6
+		popup(float(me["x"]), 0.0, "HP +30", Color("90be6d"))
 		shots.clear()
 		if randf() < 0.55:
 			var cid := Cards.random_id()
@@ -873,8 +916,85 @@ func _draw() -> void:
 	draw_arena()
 	draw_actors()
 	draw_hud(f)
+	if phase == "intro" and is_navi_round():
+		draw_intro(f)
 	if selecting:
 		draw_custom(f)
+
+# ------------------------------------------------------------------ opening cinematic
+func ease_out(x: float) -> float:
+	x = clampf(x, 0.0, 1.0)
+	return 1.0 - pow(1.0 - x, 3.0)
+
+func draw_portrait(sheet_name: String, pose: String, at: float, center: Vector2, size: float, tint: Color) -> void:
+	var tex := sheet(sheet_name)
+	var md := meta(sheet_name)
+	if tex == null or md.is_empty():
+		return
+	var rows: Dictionary = md["rows"]
+	var r: Dictionary = rows[pose] if rows.has(pose) else rows["idle"]
+	var n := int(r["n"])
+	var idx := posmod(int(at * float(r["fps"])), n)
+	var fw := int(md["fw"])
+	draw_texture_rect_region(tex, Rect2(center.x - size * 0.5, center.y - size * 0.5, size, size), Rect2(idx * fw, int(r["row"]) * fw, fw, fw), tint)
+
+func draw_intro(f: Font) -> void:
+	var e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
+	var boss := round_i >= ENEMIES.size() - 1
+	var tt := intro_total - phase_t
+	var kcol: Color = [Color("ffb703"), Color("ef476f"), Color("b5179e")][mini(round_i, 2)]
+	var a_in := clampf(tt / 0.3, 0.0, 1.0)
+	var a_out := clampf(phase_t / 0.35, 0.0, 1.0)
+	var a := minf(a_in, a_out)
+	var centre := Vector2(W * 0.5, 262.0)
+	# backdrop: dark wash, then rays turning slowly around the opponent
+	draw_rect(Rect2(0, 0, W, H), Color(0.02, 0.01, 0.06, 0.95 * a))
+	var rays := 22
+	for i in rays:
+		if i % 2 == 0:
+			continue
+		var a0 := TAU * float(i) / float(rays) + tt * (0.35 if not boss else 0.6)
+		var a1 := a0 + TAU / float(rays)
+		var far := 900.0
+		draw_colored_polygon(PackedVector2Array([centre, centre + Vector2(cos(a0), sin(a0)) * far, centre + Vector2(cos(a1), sin(a1)) * far]), Color(kcol, 0.14 * a))
+	# the opponent: swings in from the right, then zooms in while the view drifts left to right
+	var prog := clampf(tt / intro_total, 0.0, 1.0)
+	var slide := (1.0 - ease_out(tt / 0.6)) * 520.0
+	var pan := lerpf(-90.0, 90.0, prog) if boss else lerpf(-50.0, 50.0, prog)
+	var zoom := lerpf(0.78, 1.28, ease_out(prog))
+	var size := (330.0 if not boss else 360.0) * zoom * float(e["scale"]) / 1.3
+	var pc := centre + Vector2(pan + slide, -10.0 * sin(tt * 2.0))
+	draw_portrait(str(e["sheet"]), "idle", tt, pc + Vector2(8, 10), size, Color(0, 0, 0, 0.45 * a))     # shadow
+	draw_portrait(str(e["sheet"]), "idle", tt, pc, size, Color(1, 1, 1, a))
+	# letterbox bars with the text
+	var bar_in := ease_out(tt / 0.4) * (1.0 if phase_t > 0.3 else clampf(phase_t / 0.3, 0.0, 1.0))
+	var top_h := 78.0 * bar_in
+	var bot_h := 118.0 * bar_in
+	draw_rect(Rect2(0, 0, W, top_h), Color(0.01, 0.0, 0.04, 1.0))
+	draw_rect(Rect2(0, H - bot_h, W, bot_h), Color(0.01, 0.0, 0.04, 1.0))
+	draw_rect(Rect2(0, top_h - 3.0, W, 3.0), kcol)
+	draw_rect(Rect2(0, H - bot_h, W, 3.0), kcol)
+	if bar_in > 0.9:
+		if boss:
+			# warning stripes crawl along the top bar, and the label flashes
+			for i in range(-2, 22):
+				var x := float(i) * 56.0 + fmod(tt * 120.0, 56.0)
+				draw_colored_polygon(PackedVector2Array([Vector2(x, 0), Vector2(x + 28, 0), Vector2(x + 8, 22), Vector2(x - 20, 22)]), Color(1.0, 0.25, 0.25, 0.85))
+			var blink := 1.0 if int(tt * 4.0) % 2 == 0 else 0.35
+			draw_string(f, Vector2(0, 58), "FINAL OPPONENT", HORIZONTAL_ALIGNMENT_CENTER, W, 28, Color(1.0, 0.85, 0.85, blink))
+		else:
+			draw_string(f, Vector2(0, 52), "ROUND %d / %d" % [round_i + 1, ENEMIES.size()], HORIZONTAL_ALIGNMENT_CENTER, W, 26, Color(1, 1, 1, 0.9))
+		# name plate slides in from the left a moment later
+		var nx := (1.0 - ease_out((tt - 0.5) / 0.5)) * -700.0
+		var ty := H - bot_h
+		draw_string(f, Vector2(nx, ty + 62), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, W, 48, Color.WHITE)
+		draw_string(f, Vector2(-nx, ty + 96), "HP %d    SPEED %s" % [int(e["hp"]), "FAST" if float(e["speed"]) > 1.4 else ("SLOW" if float(e["speed"]) < 1.0 else "NORMAL")], HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(kcol, 0.95))
+	# white flash as it opens and as it hands over to the fight
+	var flash := maxf(clampf(1.0 - tt / 0.25, 0.0, 1.0), clampf(1.0 - phase_t / 0.25, 0.0, 1.0)) * 0.8
+	if flash > 0.0:
+		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, flash))
+	if tt > 1.6:
+		draw_string(f, Vector2(W - 190, H - bot_h - 10), "confirm: skip", HORIZONTAL_ALIGNMENT_RIGHT, 180, 12, Color(1, 1, 1, 0.4))
 
 func bg(layer: String, dx: float, tint: Color = Color.WHITE) -> void:
 	var tx := sheet(layer)
@@ -935,7 +1055,7 @@ func draw_actors() -> void:
 			"foe":
 				var fade := 1.0
 				if phase == "cleared":
-					fade = clampf(phase_t / 1.9, 0.0, 1.0)
+					fade = clampf((phase_t - 1.4) / 1.9, 0.0, 1.0)
 				elif float(foe["hp"]) <= 0.0:
 					fade = clampf(result_t / 2.8, 0.0, 1.0)
 				var flash := float(foe["flash"]) > 0.0

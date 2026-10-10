@@ -9,6 +9,8 @@ const VOLUME_DB := -9.0
 const FADE := 0.7
 
 var player := AudioStreamPlayer.new()
+var sting_player := AudioStreamPlayer.new()
+var duck := 0.0         # 0..1, how far the background track is turned down under a sting
 var streams := {}       # track name -> AudioStream or null (cached lookups)
 var want := ""          # track that should be playing
 var current := ""
@@ -18,6 +20,8 @@ var fade_level := 0.0   # 0..1
 func _ready() -> void:
 	player.volume_db = -80.0
 	add_child(player)
+	sting_player.volume_db = -4.0
+	add_child(sting_player)
 
 func find(track: String) -> AudioStream:
 	if streams.has(track):
@@ -33,6 +37,23 @@ func find(track: String) -> AudioStream:
 				break
 	streams[track] = s
 	return s
+
+# A one-shot jingle (victory.ogg ...). The background track ducks while it plays. Returns its length in seconds (0 if missing).
+func play_sting(track: String) -> float:
+	if not enabled:
+		return 0.0
+	var st := find(track)
+	if st == null:
+		return 0.0
+	var one := (st as AudioStreamOggVorbis).duplicate() as AudioStreamOggVorbis
+	one.loop = false
+	sting_player.stream = one
+	sting_player.play()
+	return one.get_length()
+
+func sting_length(track: String) -> float:
+	var st := find(track)
+	return 0.0 if st == null else st.get_length()
 
 func play_track(track: String) -> void:
 	want = track
@@ -54,5 +75,6 @@ func _process(dt: float) -> void:
 			player.stop()
 	if current != want:
 		target = 0.0
+	duck = move_toward(duck, 1.0 if sting_player.playing else 0.0, dt / 0.25)
 	fade_level = move_toward(fade_level, target, dt / FADE)
-	player.volume_db = -80.0 if fade_level <= 0.001 else VOLUME_DB + linear_to_db(fade_level)
+	player.volume_db = -80.0 if fade_level <= 0.001 else VOLUME_DB + linear_to_db(fade_level) - 14.0 * duck

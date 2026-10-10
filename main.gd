@@ -174,6 +174,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--cleartest" in args:
+		run_cleartest()
+		return
 	if "--musictest" in args:
 		run_musictest()
 		return
@@ -319,6 +322,10 @@ func start_play(recipe: Dictionary, auto := false, boons: Array = []) -> void:
 	if "folder" in runner:
 		runner.folder = (profile["folder"] as Array).duplicate()
 	runner.setup(recipe, boons)
+	if runner.has_signal("sting"):
+		runner.connect("sting", func(nm: String): music.play_sting(nm))
+	if runner.has_method("set_music"):
+		runner.set_music(music)
 	runner.finished.connect(func(won: bool, sc: float): return_to_hub(won, sc))
 	add_child(runner)
 	state = S.PLAY
@@ -1272,7 +1279,7 @@ func run_shieldtest() -> void:
 			idx = i
 	print("shield binds: ", Binds.all_for("shield"))
 	start_play(carts[idx], false)
-	await get_tree().create_timer(2.3).timeout
+	await get_tree().create_timer(2.4).timeout
 	for b in Binds.all_for("shield"):
 		runner.guard_t = 0.0
 		runner.guard_cd = 0.0
@@ -1311,7 +1318,7 @@ func run_padtest() -> void:
 		if carts[i]["id"] == "wave_duel":
 			idx = i
 	start_play(carts[idx], false)
-	await get_tree().create_timer(2.3).timeout
+	await get_tree().create_timer(2.4).timeout
 	var w = runner
 	var ok := true
 	w.gauge = 1.0
@@ -1349,4 +1356,33 @@ func run_musictest() -> void:
 	music.play_track("hub")
 	await get_tree().create_timer(2.5).timeout
 	print("switched to hub: ", music.current, " playing: ", music.player.playing)
+	get_tree().quit()
+
+# Beat all three opponents in a row and report the pacing between them and the victory jingle.
+func run_cleartest() -> void:
+	var idx := 0
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	start_play(carts[idx], false)
+	var w = runner
+	var t0 := Time.get_ticks_msec()
+	var last := ""
+	var res: Array = []     # lambdas capture by value, so report through an array
+	w.finished.connect(func(ok: bool, _sc: float): res.append(ok))
+	for step in 400:
+		await get_tree().create_timer(0.1).timeout
+		if not res.is_empty():
+			break
+		if runner == null:
+			await get_tree().create_timer(0.2).timeout
+			break
+		if w.phase == "fight" and float(w.foe["hp"]) > 0.0 and w.t > 0.0:
+			w.foe["hp"] = 0.0
+		var tag := "round %d %s" % [w.round_i + 1, w.phase]
+		if tag != last:
+			print("%5.1fs  %s   (banner: %s)" % [float(Time.get_ticks_msec() - t0) / 1000.0, tag, w.banner])
+			last = tag
+	print("victory jingle length: %.1f s" % music.sting_length("victory"))
+	print("CLEAR FLOW OK" if (not res.is_empty() and res[0]) else "CLEAR FLOW BROKEN")
 	get_tree().quit()
