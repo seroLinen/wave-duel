@@ -456,7 +456,9 @@ func _input(e: InputEvent) -> void:
 		return
 	if e is InputEventJoypadButton and e.pressed:
 		var pk := pad_key(e.button_index)
-		if pk != 0:
+		if pk == KEY_W or pk == KEY_S or pk == KEY_A or pk == KEY_D:
+			pad_nav(pk)
+		elif pk != 0:
 			on_key(pk)
 		return
 	if not (e is InputEventKey and e.pressed and not e.echo):
@@ -587,6 +589,14 @@ func draw_pause() -> void:
 		overlay.draw_string(f, Vector2(r.position.x, r.position.y + 26), items[i]["label"], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 17, Color.WHITE)
 	overlay.draw_string(f, Vector2(0, H - 14), "the mouse is free while this menu is open    Esc / Plus / B: resume", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
 
+# One menu step per push, even if a pad reports the same D-pad press as a button AND a stick axis.
+var nav_last := -1.0
+func pad_nav(k: int) -> void:
+	if t - nav_last < 0.14:
+		return
+	nav_last = t
+	on_key(k)
+
 # A button mashed or held on one screen must not act on the next one (Bridge/hub/world hand-offs).
 const SCREEN_GRACE := 0.35
 var seen_state := -1
@@ -696,9 +706,9 @@ func _process(dt: float) -> void:
 		# stick / D-pad navigation in menus: one step per push
 		var v := Pad.stick()    # stick only: the D-pad arrives as button events (pad_key), so polling it too skipped every other item
 		if absf(v.x) > 0.6 and absf(nav_prev.x) <= 0.6:
-			on_key(KEY_D if v.x > 0 else KEY_A)
+			pad_nav(KEY_D if v.x > 0 else KEY_A)
 		if absf(v.y) > 0.6 and absf(nav_prev.y) <= 0.6:
-			on_key(KEY_S if v.y > 0 else KEY_W)
+			pad_nav(KEY_S if v.y > 0 else KEY_W)
 		nav_prev = v
 	if state == S.BRIDGE:
 		bridge_t += dt

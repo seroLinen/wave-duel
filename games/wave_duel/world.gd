@@ -163,7 +163,7 @@ func _input(e: InputEvent) -> void:
 		toggle_lock()
 		return
 	if selecting and e is InputEventJoypadButton and e.pressed and (e.button_index == JOY_BUTTON_DPAD_LEFT or e.button_index == JOY_BUTTON_DPAD_RIGHT):
-		cur = clampi(cur + (1 if e.button_index == JOY_BUTTON_DPAD_RIGHT else -1), 0, hand.size() - 1)
+		card_step(1 if e.button_index == JOY_BUTTON_DPAD_RIGHT else -1)
 		return
 	var k := -1
 	if Binds.matches("custom", e):
@@ -174,6 +174,14 @@ func _input(e: InputEvent) -> void:
 		k = e.keycode            # A / D / arrows move the card cursor
 	if k != -1:
 		handle_key(k)
+
+# One card-cursor step per push, even if a pad reports a D-pad press as a button and a stick axis at once.
+var step_at := -1.0
+func card_step(d: int) -> void:
+	if t - step_at < 0.14:
+		return
+	step_at = t
+	cur = clampi(cur + d, 0, hand.size() - 1)
 
 func handle_key(k: int) -> void:
 	if phase != "fight":
@@ -323,7 +331,7 @@ func tick(dt: float) -> void:
 	if selecting:
 		var nx := Pad.stick().x           # the D-pad moves the cursor from its button events (see _input)
 		if absf(nx) > 0.6 and absf(nav_prev) <= 0.6:
-			cur = clampi(cur + int(signf(nx)), 0, hand.size() - 1)
+			card_step(int(signf(nx)))
 		nav_prev = nx
 	var wdt := dt * world_scale
 	if phase == "intro":
