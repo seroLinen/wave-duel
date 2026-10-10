@@ -1,8 +1,8 @@
 extends RefCounted
-# Remappable actions. The built-in defaults always work; buttons you add in Pause > Controls
-# are stored in the profile and work alongside them. A binding is {"t": "key"|"joy"|"mouse", "c": code}.
-# Steam and Windows can turn controller buttons into keys or mouse clicks before the game sees
-# them, so "press the button you want" accepts whichever kind of event actually arrives.
+# Remappable controls. Every action has exactly two slots: "kb" (a key or mouse button) and "pad" (a controller button).
+# Binding a button REPLACES that slot, and if another action in the same group already used the button it loses it
+# (so one button never does two jobs at once). A binding is {"t": "key"|"mouse"|"joy", "c": code}; {} means unbound.
+# Controller buttons are named by POSITION: bottom / right / left / top (a Nintendo Pro Controller prints them as B / A / Y / X).
 
 const ACTIONS := [
 	{"id": "confirm", "label": "Confirm / interact"},
@@ -15,65 +15,107 @@ const ACTIONS := [
 	{"id": "shield", "label": "Holo shield (guard)"},
 ]
 
+# Actions that are live at the same time. Only these can conflict with each other.
+const GROUPS := [
+	["fire", "custom", "card", "lockon", "shield"],   # the duel
+	["fire", "jump"],                                  # the platformer worlds
+	["confirm", "menu"],                               # menus
+]
+
 const DEFAULTS := {
-	"confirm": [{"t": "key", "c": KEY_E}, {"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_SPACE}, {"t": "joy", "c": JOY_BUTTON_A}],
-	"menu": [{"t": "key", "c": KEY_TAB}, {"t": "joy", "c": JOY_BUTTON_START}, {"t": "joy", "c": JOY_BUTTON_BACK}],
-	"fire": [{"t": "key", "c": KEY_SPACE}, {"t": "key", "c": KEY_J}, {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}],   # + right trigger
-	"jump": [{"t": "key", "c": KEY_W}, {"t": "key", "c": KEY_UP}, {"t": "key", "c": KEY_ENTER}, {"t": "joy", "c": JOY_BUTTON_A}],
-	"custom": [{"t": "key", "c": KEY_Q}, {"t": "key", "c": KEY_C}, {"t": "joy", "c": JOY_BUTTON_LEFT_SHOULDER}, {"t": "joy", "c": JOY_BUTTON_X}],
-	"card": [{"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_K}, {"t": "joy", "c": JOY_BUTTON_A}],
-	"lockon": [{"t": "key", "c": KEY_DOWN}, {"t": "key", "c": KEY_S}, {"t": "joy", "c": JOY_BUTTON_Y}],   # a pad stick / D-pad pushed down also locks on
-	"shield": [{"t": "key", "c": KEY_V}, {"t": "key", "c": KEY_SHIFT}, {"t": "joy", "c": JOY_BUTTON_B}],
+	"confirm": {"kb": {"t": "key", "c": KEY_E}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
+	"menu": {"kb": {"t": "key", "c": KEY_TAB}, "pad": {"t": "joy", "c": JOY_BUTTON_START}},
+	"fire": {"kb": {"t": "key", "c": KEY_SPACE}, "pad": {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}},
+	"jump": {"kb": {"t": "key", "c": KEY_W}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
+	"custom": {"kb": {"t": "key", "c": KEY_Q}, "pad": {"t": "joy", "c": JOY_BUTTON_LEFT_SHOULDER}},
+	"card": {"kb": {"t": "key", "c": KEY_ENTER}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
+	"lockon": {"kb": {"t": "key", "c": KEY_DOWN}, "pad": {"t": "joy", "c": JOY_BUTTON_Y}},
+	"shield": {"kb": {"t": "key", "c": KEY_V}, "pad": {"t": "joy", "c": JOY_BUTTON_B}},
 }
 
-static var extra := {}   # action id -> Array of bindings added by the player
+static var map := {}   # action id -> {"kb": binding, "pad": binding}
+
+static func _fresh() -> Dictionary:
+	return DEFAULTS.duplicate(true)
+
+static func ensure() -> void:
+	if map.is_empty():
+		map = _fresh()
+
+static func reset_all() -> void:
+	map = _fresh()
+
+static func reset(action: String) -> void:
+	ensure()
+	map[action] = (DEFAULTS[action] as Dictionary).duplicate(true)
 
 static func load_from(d: Dictionary) -> void:
-	extra = {}
+	map = _fresh()
 	for action in d:
-		var arr: Array = []
-		for b in d[action]:
-			if b is Dictionary and b.has("t") and b.has("c"):
-				arr.append({"t": str(b["t"]), "c": int(b["c"])})
-		extra[str(action)] = arr
+		if not map.has(str(action)) or not (d[action] is Dictionary):
+			continue
+		for slot in ["kb", "pad"]:
+			if (d[action] as Dictionary).has(slot):
+				var v = d[action][slot]
+				if v is Dictionary and v.has("t") and v.has("c"):
+					map[str(action)][slot] = {"t": str(v["t"]), "c": int(v["c"])}
+				else:
+					map[str(action)][slot] = {}
 
 static func to_dict() -> Dictionary:
-	return extra.duplicate(true)
+	ensure()
+	return map.duplicate(true)
 
 static func same(a: Dictionary, b: Dictionary) -> bool:
+	if a.is_empty() or b.is_empty():
+		return false
 	return str(a["t"]) == str(b["t"]) and int(a["c"]) == int(b["c"])
 
-static func add(action: String, b: Dictionary) -> void:
-	if not extra.has(action):
-		extra[action] = []
-	for e in extra[action]:
-		if same(e, b):
-			return
-	extra[action].append(b)
+static func get_slot(action: String, slot: String) -> Dictionary:
+	ensure()
+	return map[action][slot]
 
-static func clear(action: String) -> void:
-	extra.erase(action)
+# Bind a button to an action's keyboard/pad slot. Returns the labels of actions that lost the button to it.
+static func set_slot(action: String, slot: String, b: Dictionary) -> Array:
+	ensure()
+	var lost: Array = []
+	for g in GROUPS:
+		if not (g as Array).has(action):
+			continue
+		for other in g:
+			if other == action:
+				continue
+			if same(map[other][slot], b):
+				map[other][slot] = {}
+				var nm := label_of(str(other))
+				if not lost.has(nm):
+					lost.append(nm)
+	map[action][slot] = b
+	return lost
+
+static func label_of(id: String) -> String:
+	for a in ACTIONS:
+		if a["id"] == id:
+			return str(a["label"])
+	return id
+
+static func all_for(action: String) -> Array:
+	ensure()
+	var out: Array = []
+	for slot in ["kb", "pad"]:
+		var b: Dictionary = map[action][slot]
+		if not b.is_empty():
+			out.append(b)
+	return out
 
 static func hit(b: Dictionary, e: InputEvent) -> bool:
+	if b.is_empty():
+		return false
 	match str(b["t"]):
 		"key": return e is InputEventKey and e.pressed and not e.echo and e.keycode == int(b["c"])
 		"joy": return e is InputEventJoypadButton and e.pressed and e.button_index == int(b["c"])
 		"mouse": return e is InputEventMouseButton and e.pressed and e.button_index == int(b["c"])
 	return false
-
-# The built-in buttons ALWAYS work; buttons you add in the Controls screen work on top of them. Nothing you
-# bind can lock you out of an action. Backspace in the Controls screen removes the buttons you added.
-static func all_for(action: String) -> Array:
-	var out: Array = []
-	out.append_array(DEFAULTS.get(action, []))
-	for b in extra.get(action, []):
-		var dup := false
-		for d in out:
-			if same(d, b):
-				dup = true
-		if not dup:
-			out.append(b)
-	return out
 
 static func matches(action: String, e: InputEvent) -> bool:
 	for b in all_for(action):
@@ -81,13 +123,9 @@ static func matches(action: String, e: InputEvent) -> bool:
 			return true
 	return false
 
-static func matches_extra(action: String, e: InputEvent) -> bool:
-	for b in extra.get(action, []):
-		if hit(b, e):
-			return true
-	return false
-
 static func down(b: Dictionary) -> bool:
+	if b.is_empty():
+		return false
 	match str(b["t"]):
 		"key": return Input.is_key_pressed(int(b["c"]))
 		"joy":
@@ -103,61 +141,18 @@ static func held(action: String) -> bool:
 			return true
 	return false
 
-# The buttons an action uses once every button that another action owns is taken out. This is what
-# stops "play a card" from also firing when both were bound to the same button.
-static func effective_excluding(action: String, others: Array) -> Array:
-	var banned: Array = []
-	for o in others:
-		banned.append_array(all_for(str(o)))
-	var out: Array = []
-	for b in all_for(action):
-		var shared := false
-		for x in banned:
-			if same(x, b):
-				shared = true
-				break
-		if not shared:
-			out.append(b)
-	return out
-
-static func held_excluding(action: String, others: Array) -> bool:
-	for b in effective_excluding(action, others):
-		if down(b):
-			return true
-	return false
-
-static func label(b: Dictionary) -> String:
-	match str(b["t"]):
-		"key": return "Key " + OS.get_keycode_string(int(b["c"]))
-		"joy": return "Pad " + pad_name(int(b["c"]))
-		"mouse": return "Mouse button %d" % int(b["c"])
-	return "?"
-
-# What an action responds to, split by device, for the Controls screen.
-static func split(action: String) -> Dictionary:
-	var keys: Array = []
-	var pad: Array = []
-	for b in all_for(action):
-		(pad if str(b["t"]) == "joy" else keys).append(b)
-	return {"keys": keys, "pad": pad}
-
-static func extras_text(action: String) -> String:
-	var parts: Array = []
-	for b in extra.get(action, []):
-		parts.append(label(b))
-	return ", ".join(parts) if not parts.is_empty() else "defaults only"
-
-# What counts as "a button press" while listening for a new binding.
-static func capture(e: InputEvent) -> Dictionary:
-	if e is InputEventKey and e.pressed and not e.echo:
-		return {"t": "key", "c": int(e.keycode)}
-	if e is InputEventJoypadButton and e.pressed:
+# What counts as "a button press" while listening for a new binding in the given slot.
+static func capture(e: InputEvent, slot: String) -> Dictionary:
+	if slot == "kb":
+		if e is InputEventKey and e.pressed and not e.echo and e.keycode != KEY_ESCAPE:
+			return {"t": "key", "c": int(e.keycode)}
+		if e is InputEventMouseButton and e.pressed:
+			return {"t": "mouse", "c": int(e.button_index)}
+	elif e is InputEventJoypadButton and e.pressed:
 		return {"t": "joy", "c": int(e.button_index)}
-	if e is InputEventMouseButton and e.pressed:
-		return {"t": "mouse", "c": int(e.button_index)}
 	return {}
 
-# Godot names face buttons by position: A bottom, B right, X left, Y top (a Pro Controller prints them differently).
+# Godot names face buttons by position: A bottom, B right, X left, Y top.
 static func pad_name(i: int) -> String:
 	match i:
 		JOY_BUTTON_A: return "bottom"
@@ -177,31 +172,10 @@ static func pad_name(i: int) -> String:
 	return "button %d" % i
 
 static func short(b: Dictionary) -> String:
+	if b.is_empty():
+		return "unbound"
 	match str(b["t"]):
 		"key": return OS.get_keycode_string(int(b["c"]))
 		"joy": return pad_name(int(b["c"]))
 		"mouse": return "Mouse%d" % int(b["c"])
 	return "?"
-
-# What an action currently uses, for the Controls screen.
-static func shown(action: String) -> String:
-	var mine: Array = extra.get(action, [])
-	var parts: Array = []
-	for b in all_for(action):
-		parts.append(short(b))
-	if mine.is_empty():
-		return "default: " + ", ".join(parts)
-	return "built-in + yours: " + ", ".join(parts)
-
-# Other actions that already use this button.
-static func users_of(b: Dictionary, except_action: String) -> Array:
-	var out: Array = []
-	for a in ACTIONS:
-		var id: String = a["id"]
-		if id == except_action:
-			continue
-		for x in all_for(id):
-			if same(x, b):
-				out.append(str(a["label"]))
-				break
-	return out

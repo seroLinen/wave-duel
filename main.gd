@@ -90,6 +90,7 @@ var warp_mat: ShaderMaterial
 var capture_label: Label
 var bind_mode := 0           # 0 off, 1 choosing an action, 2 listening for a button
 var bind_sel := 0
+var bind_col := 0             # 0 = keyboard slot, 1 = controller slot
 var bind_last := ""
 var bind_note := ""
 var bind_note_t := 0.0
@@ -203,7 +204,8 @@ func _ready() -> void:
 	if "--controlsdemo" in args:
 		open_pause()
 		bind_mode = 1
-		Binds.add("custom", {"t": "mouse", "c": 1})
+		bind_sel = 4
+		bind_col = 1
 	if "--pausedemo" in args:
 		open_pause()
 	if shot_path != "":
@@ -375,6 +377,7 @@ func pad_key(b: int) -> int:
 			return KEY_ESCAPE if (state != S.PLAY or pause_open) else 0   # back (B shoots in games)
 		JOY_BUTTON_START, JOY_BUTTON_BACK: return KEY_TAB   # menu
 		JOY_BUTTON_X, JOY_BUTTON_Y:
+			if pause_open and bind_mode == 1: return KEY_BACKSPACE   # reset the selected row
 			if state == S.MASH: return KEY_P
 			if state == S.BRIDGE: return KEY_BACKSPACE
 			return 0   # (X deletes a mash in the hub: keyboard only, so a stray pad press can never do it)
@@ -414,30 +417,27 @@ func log_input(e: InputEvent) -> void:
 
 func _input(e: InputEvent) -> void:
 	log_input(e)
-	if bind_mode == 2:   # listening: take the first button that arrives, whatever kind it is
-		var b := Binds.capture(e)
+	if bind_mode == 2:   # listening for the new button of the chosen slot
+		if e is InputEventKey and e.pressed and not e.echo and e.keycode == KEY_ESCAPE:
+			bind_mode = 1
+			return
+		var slot := "kb" if bind_col == 0 else "pad"
+		var b := Binds.capture(e, slot)
 		if not b.is_empty():
-			bind_last = Binds.label(b)
-			if str(b["t"]) == "key" and int(b["c"]) == KEY_ESCAPE:
-				bind_mode = 1
-			else:
-				var aid := str(Binds.ACTIONS[bind_sel]["id"])
-				Binds.add(aid, b)
-				var others := Binds.users_of(b, aid)
-				if others.is_empty():
-					bind_note = "%s is now set for: %s" % [Binds.short(b), Binds.ACTIONS[bind_sel]["label"]]
-				else:
-					bind_note = "Heads up - %s is also used by: %s" % [Binds.short(b), ", ".join(others)]
-				bind_note_t = 5.0
-				profile["bindings"] = Binds.to_dict()
-				Carts.save_profile(profile)
-				bind_mode = 1
+			var aid := str(Binds.ACTIONS[bind_sel]["id"])
+			var lost := Binds.set_slot(aid, slot, b)
+			bind_note = "%s  ->  %s" % [Binds.label_of(aid), Binds.short(b)]
+			if not lost.is_empty():
+				bind_note += "     (taken from: %s)" % ", ".join(lost)
+			bind_note_t = 5.0
+			save_binds()
+			bind_mode = 1
 		return
 	if bind_mode == 0:
-		if Binds.matches_extra("menu", e):
+		if Binds.matches("menu", e):
 			on_key(KEY_TAB)
 			return
-		if Binds.matches_extra("confirm", e):
+		if Binds.matches("confirm", e):
 			on_key(KEY_E)
 			return
 	if state == S.HUB and not pause_open and e is InputEventMouseMotion:
@@ -537,54 +537,73 @@ func pad_status() -> String:
 		return "CONTROLLER: not detected (turn it on; if Steam is starting, wait a few seconds)"
 	return "CONTROLLER: connected - " + Input.get_joy_name(id)
 
-func draw_bind_tokens(f: Font, at: Vector2, list: Array, col: Color, action: String) -> void:
-	var x := at.x
-	for b in list:
-		var mine := false
-		for e in Binds.extra.get(action, []):
-			if Binds.same(e, b):
-				mine = true
-		var txt := Binds.short(b)
-		overlay.draw_string(f, Vector2(x, at.y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("ffd166") if mine else col)
-		x += f.get_string_size(txt + "  ", HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+func save_binds() -> void:
+	profile["bindings"] = Binds.to_dict()
+	profile["bindings_v"] = 4
+	Carts.save_profile(profile)
 
 func draw_controls(f: Font) -> void:
 	overlay.draw_rect(Rect2(0, 0, W, H), Color(0.01, 0.02, 0.05, 1.0))
-	overlay.draw_string(f, Vector2(0, 70), "CONTROLS", HORIZONTAL_ALIGNMENT_CENTER, W, 32, Color("4cc9f0"))
-	overlay.draw_string(f, Vector2(0, 98), "keys on the left, controller on the right - yellow ones are yours", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
-	for i in Binds.ACTIONS.size():
+	overlay.draw_string(f, Vector2(0, 62), "CONTROLS", HORIZONTAL_ALIGNMENT_CENTER, W, 32, Color("4cc9f0"))
+	overlay.draw_string(f, Vector2(0, 90), "pick a button to change; the new one replaces the old one", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
+	overlay.draw_string(f, Vector2(400, 112), "KEYBOARD", HORIZONTAL_ALIGNMENT_CENTER, 190, 12, Color(1, 1, 1, 0.5))
+	overlay.draw_string(f, Vector2(610, 112), "CONTROLLER", HORIZONTAL_ALIGNMENT_CENTER, 190, 12, Color("7df9ff"))
+	var n := Binds.ACTIONS.size()
+	for i in n + 1:
+		var r := Rect2(120, 120 + i * 40, 720, 34)
+		var row_sel := i == bind_sel
+		overlay.draw_rect(r, Color(1, 1, 1, 0.10 if row_sel else 0.04))
+		overlay.draw_rect(r, Color(1, 1, 1, 0.5 if row_sel else 0.2), false, 1.0)
+		if i == n:
+			overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 23), "Reset ALL controls to defaults", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("ff9f1c") if row_sel else Color(1, 1, 1, 0.7))
+			continue
 		var a: Dictionary = Binds.ACTIONS[i]
-		var r := Rect2(140, 124 + i * 44, 680, 38)
-		var sel := i == bind_sel
-		overlay.draw_rect(r, Color(1, 1, 1, 0.14 if sel else 0.05))
-		overlay.draw_rect(r, Color(1, 1, 1, 0.8 if sel else 0.25), false, 2.0)
-		overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 25), str(a["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-		var sp := Binds.split(str(a["id"]))
-		draw_bind_tokens(f, Vector2(r.position.x + 250, r.position.y + 24), sp["keys"], Color(1, 1, 1, 0.85), str(a["id"]))
-		draw_bind_tokens(f, Vector2(r.position.x + 520, r.position.y + 24), sp["pad"], Color("7df9ff"), str(a["id"]))
+		overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 23), str(a["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+		for c in 2:
+			var cell := Rect2(r.position.x + 280 + c * 210, r.position.y + 3, 190, 28)
+			var csel := row_sel and bind_col == c
+			var b: Dictionary = Binds.get_slot(str(a["id"]), "kb" if c == 0 else "pad")
+			overlay.draw_rect(cell, Color(0.3, 0.8, 1.0, 0.28) if csel else Color(0, 0, 0, 0.25))
+			overlay.draw_rect(cell, Color("ffd166") if csel else Color(1, 1, 1, 0.18), false, 2.0 if csel else 1.0)
+			var col := Color(1, 1, 1, 0.9) if c == 0 else Color("7df9ff")
+			if b.is_empty():
+				col = Color(1, 1, 1, 0.3)
+			overlay.draw_string(f, Vector2(cell.position.x, cell.position.y + 20), Binds.short(b), HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 15, col)
 	if bind_note_t > 0.0:
-		overlay.draw_string(f, Vector2(0, 494), bind_note, HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color("ff9f1c") if bind_note.begins_with("Heads") else Color("90be6d"))
+		overlay.draw_string(f, Vector2(0, 494), bind_note, HORIZONTAL_ALIGNMENT_CENTER, W, 15, Color("ff9f1c") if bind_note.contains("taken from") else Color("90be6d"))
 	overlay.draw_string(f, Vector2(0, H - 30), pad_status() + "    last: " + (last_input if last_input != "" else "-"), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color("7df9ff"))
-	overlay.draw_string(f, Vector2(0, H - 14), "W/S select    Enter: add a button    Backspace: remove yours    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.6))
+	overlay.draw_string(f, Vector2(0, H - 14), "up/down row    left/right column    Enter: change    Backspace: reset this row    Esc: back", HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.6))
 	if bind_mode == 2:
-		overlay.draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.8))
-		overlay.draw_string(f, Vector2(0, 220), "Press the button for:", HORIZONTAL_ALIGNMENT_CENTER, W, 22, Color(1, 1, 1, 0.8))
-		overlay.draw_string(f, Vector2(0, 270), str(Binds.ACTIONS[bind_sel]["label"]), HORIZONTAL_ALIGNMENT_CENTER, W, 40, Color("ffd166"))
-		overlay.draw_string(f, Vector2(0, 330), "(Esc cancels)", HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(1, 1, 1, 0.5))
+		overlay.draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.85))
+		overlay.draw_string(f, Vector2(0, 210), "Press the new %s for:" % ("keyboard key" if bind_col == 0 else "controller button"), HORIZONTAL_ALIGNMENT_CENTER, W, 22, Color(1, 1, 1, 0.8))
+		overlay.draw_string(f, Vector2(0, 266), str(Binds.ACTIONS[bind_sel]["label"]), HORIZONTAL_ALIGNMENT_CENTER, W, 38, Color("ffd166"))
+		overlay.draw_string(f, Vector2(0, 322), "(Esc cancels)", HORIZONTAL_ALIGNMENT_CENTER, W, 16, Color(1, 1, 1, 0.5))
 
 func pause_key(k: int) -> void:
 	if bind_mode == 1:
-		var na := Binds.ACTIONS.size()
+		var na := Binds.ACTIONS.size() + 1      # the last row is "reset all"
 		match k:
 			KEY_W, KEY_UP: bind_sel = (bind_sel - 1 + na) % na
 			KEY_S, KEY_DOWN: bind_sel = (bind_sel + 1) % na
+			KEY_A, KEY_LEFT: bind_col = 0
+			KEY_D, KEY_RIGHT: bind_col = 1
 			KEY_E, KEY_ENTER, KEY_SPACE:
-				bind_mode = 2
-				bind_last = ""
+				if bind_sel == na - 1:
+					Binds.reset_all()
+					bind_note = "All controls are back to the defaults"
+					bind_note_t = 4.0
+					save_binds()
+				else:
+					bind_mode = 2
 			KEY_BACKSPACE, KEY_DELETE:
-				Binds.clear(str(Binds.ACTIONS[bind_sel]["id"]))
-				profile["bindings"] = Binds.to_dict()
-				Carts.save_profile(profile)
+				if bind_sel == na - 1:
+					Binds.reset_all()
+					bind_note = "All controls are back to the defaults"
+				else:
+					Binds.reset(str(Binds.ACTIONS[bind_sel]["id"]))
+					bind_note = "%s is back to its defaults" % Binds.ACTIONS[bind_sel]["label"]
+				bind_note_t = 4.0
+				save_binds()
 			KEY_ESCAPE, KEY_TAB: bind_mode = 0
 		return
 	var n := pause_items().size()
@@ -1101,25 +1120,35 @@ func run_reach() -> void:
 
 func run_bindtest() -> void:
 	Binds.load_from({})
-	var ev := InputEventMouseButton.new()
-	ev.button_index = MOUSE_BUTTON_LEFT
-	ev.pressed = true
-	print("before: custom matches mouse1 = ", Binds.matches("custom", ev))
-	Binds.add("custom", Binds.capture(ev))
-	print("after add: custom matches mouse1 = ", Binds.matches("custom", ev), " | extra only = ", Binds.matches_extra("custom", ev), " | confirm unaffected = ", Binds.matches("confirm", ev))
-	var round_trip = JSON.parse_string(JSON.stringify(Binds.to_dict()))
-	Binds.load_from(round_trip)
-	print("after save/load round trip: ", Binds.matches("custom", ev), " | label: ", Binds.extras_text("custom"))
+	var ok := true
+	var left := InputEventMouseButton.new()
+	left.button_index = MOUSE_BUTTON_LEFT
+	left.pressed = true
+	Binds.set_slot("custom", "kb", Binds.capture(left, "kb"))
 	var q := InputEventKey.new()
 	q.keycode = KEY_Q
 	q.pressed = true
-	print("default Q still fires custom after adding a button: ", Binds.matches("custom", q))
-	# the exact situation from a real save: Enter bound to both Fire and Play next card
-	Binds.load_from({"fire": [{"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_SPACE}], "card": [{"t": "key", "c": KEY_ENTER}]})
-	var fire_keys: Array = []
-	for b in Binds.effective_excluding("fire", ["card", "custom"]):
-		fire_keys.append(Binds.short(b))
-	print("fire buttons after removing shared ones: ", fire_keys, "  (Enter is gone, Space stays)")
+	print("new key REPLACES the old one: mouse1 fires custom=", Binds.matches("custom", left), " | old Q still fires=", Binds.matches("custom", q))
+	ok = ok and Binds.matches("custom", left) and not Binds.matches("custom", q)
+	var lost := Binds.set_slot("shield", "pad", {"t": "joy", "c": JOY_BUTTON_Y})   # Y belongs to lock-on by default
+	print("rebinding a taken button steals it: lock-on pad is now '", Binds.short(Binds.get_slot("lockon", "pad")), "', took from: ", lost)
+	ok = ok and Binds.get_slot("lockon", "pad").is_empty() and lost.size() == 1
+	Binds.set_slot("fire", "pad", {"t": "joy", "c": JOY_BUTTON_A})   # A is also Play next card: both are duel actions
+	print("fire stole A from card: card pad = '", Binds.short(Binds.get_slot("card", "pad")), "'")
+	ok = ok and Binds.get_slot("card", "pad").is_empty()
+	Binds.load_from(JSON.parse_string(JSON.stringify(Binds.to_dict())))
+	print("save/load round trip keeps it: ", Binds.short(Binds.get_slot("shield", "pad")), " / ", Binds.short(Binds.get_slot("custom", "kb")))
+	ok = ok and Binds.short(Binds.get_slot("shield", "pad")) == "top"
+	Binds.reset("shield")
+	print("reset one row: shield pad = ", Binds.short(Binds.get_slot("shield", "pad")), " kb = ", Binds.short(Binds.get_slot("shield", "kb")))
+	ok = ok and Binds.short(Binds.get_slot("shield", "pad")) == "right"
+	Binds.reset_all()
+	print("reset all: custom kb = ", Binds.short(Binds.get_slot("custom", "kb")), ", card pad = ", Binds.short(Binds.get_slot("card", "pad")))
+	ok = ok and Binds.short(Binds.get_slot("custom", "kb")) == "Q" and Binds.short(Binds.get_slot("card", "pad")) == "bottom"
+	Binds.load_from({"fire": [{"t": "key", "c": KEY_ENTER}], "card": [{"t": "key", "c": KEY_ENTER}]})   # an old-format save
+	print("old-format save is ignored safely: fire kb = ", Binds.short(Binds.get_slot("fire", "kb")))
+	ok = ok and Binds.short(Binds.get_slot("fire", "kb")) == "Space"
+	print("BINDINGS OK" if ok else "BINDINGS BROKEN")
 	get_tree().quit()
 
 # ---------- self test (headless) ----------
@@ -1227,7 +1256,7 @@ func run_shieldtest() -> void:
 	for i in carts.size():
 		if carts[i]["id"] == "wave_duel":
 			idx = i
-	print("shield binds: ", Binds.shown("shield"))
+	print("shield binds: ", Binds.all_for("shield"))
 	start_play(carts[idx], false)
 	await get_tree().create_timer(2.3).timeout
 	for b in Binds.all_for("shield"):
@@ -1272,15 +1301,15 @@ func run_padtest() -> void:
 	var w = runner
 	var ok := true
 	w.gauge = 1.0
-	await pad_tap(JOY_BUTTON_X)
-	print("left (X) opens Custom: ", w.selecting); ok = ok and w.selecting
+	await pad_tap(JOY_BUTTON_LEFT_SHOULDER)
+	print("LB opens Custom: ", w.selecting); ok = ok and w.selecting
 	var c0: int = w.cur
 	await pad_tap(JOY_BUTTON_DPAD_RIGHT)
 	print("D-right moves cursor: ", w.cur, " (was ", c0, ")"); ok = ok and w.cur == c0 + 1
 	await pad_tap(JOY_BUTTON_A)
 	print("bottom (A) picks a card: ", w.picked.size()); ok = ok and w.picked.size() == 1
-	await pad_tap(JOY_BUTTON_X)
-	print("left (X) confirms: selecting=", w.selecting, " queued=", w.queue.size()); ok = ok and (not w.selecting) and w.queue.size() == 1
+	await pad_tap(JOY_BUTTON_LEFT_SHOULDER)
+	print("LB confirms: selecting=", w.selecting, " queued=", w.queue.size()); ok = ok and (not w.selecting) and w.queue.size() == 1
 	var shot_before: int = w.shots.size()
 	await pad_tap(JOY_BUTTON_B)
 	print("right (B) raises shield: guard_t=%.2f" % w.guard_t); ok = ok and w.guard_t > 0.0
@@ -1289,11 +1318,8 @@ func run_padtest() -> void:
 	await pad_tap(JOY_BUTTON_RIGHT_SHOULDER)
 	print("RB does not raise the shield: ", w.guard_t == 0.0); ok = ok and w.guard_t == 0.0
 	# held-button polling cannot be injected without a real pad, so check the fire binding list instead
-	var fire_pad: Array = []
-	for b in Binds.effective_excluding("fire", ["card", "custom", "shield", "lockon"]):
-		if str(b["t"]) == "joy":
-			fire_pad.append(Binds.short(b))
-	print("pad buttons that fire: ", fire_pad, " (plus ZR trigger)"); ok = ok and fire_pad == ["RB"]
+	var fire_pad := Binds.short(Binds.get_slot("fire", "pad"))
+	print("pad button that fires: ", fire_pad, " (plus the ZR trigger)"); ok = ok and fire_pad == "RB"
 	await pad_tap(JOY_BUTTON_Y)
 	print("top (Y) with no sword queued does nothing harmful: locked=", w.locked); ok = ok and not w.locked
 	print("PAD LAYOUT OK" if ok else "PAD LAYOUT BROKEN")

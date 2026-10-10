@@ -184,7 +184,7 @@ func read_dir(dt: float) -> Vector2:
 func read_shoot() -> bool:
 	if auto:
 		return true
-	return Binds.held_excluding("fire", ["jump"]) or Pad.shoot()
+	return Binds.held("fire") or Pad.shoot()
 
 # ---------- body ----------
 func move_player(d: Vector2, dt: float) -> void:

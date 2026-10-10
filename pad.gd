@@ -80,7 +80,7 @@ static func shoot() -> bool:
 	var d := id()
 	if d < 0:
 		return false
-	return Input.is_joy_button_pressed(d, JOY_BUTTON_RIGHT_SHOULDER) or Input.get_joy_axis(d, JOY_AXIS_TRIGGER_RIGHT) > 0.5
+	return Input.get_joy_axis(d, JOY_AXIS_TRIGGER_RIGHT) > 0.5
 
 # True while any stick is pushed (used to tell "playing with the pad" from "using the mouse").
 static func active() -> bool:

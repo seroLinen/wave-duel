@@ -94,7 +94,7 @@ static func earns(r: Dictionary) -> Array:
 	return out
 
 static func load_profile() -> Dictionary:
-	var prof := {"wallet": {}, "stats": {}, "cards": Cards.starter_cards(), "folder": Cards.starter_folder(), "bindings": {}, "bindings_v": 3, "cards_v": 2, "show_retired": false}
+	var prof := {"wallet": {}, "stats": {}, "cards": Cards.starter_cards(), "folder": Cards.starter_folder(), "bindings": {}, "bindings_v": 4, "cards_v": 2, "show_retired": false}
 	if FileAccess.file_exists(PROFILE_PATH):
 		var data = JSON.parse_string(FileAccess.open(PROFILE_PATH, FileAccess.READ).get_as_text())
 		if data is Dictionary:
@@ -102,8 +102,8 @@ static func load_profile() -> Dictionary:
 			prof["stats"] = data.get("stats", {})
 			prof["cards"] = data.get("cards", prof["cards"])
 			prof["folder"] = data.get("folder", prof["folder"])
-			# v3: bindings became add-only. Older saves hold keyboard leftovers from the Steam Input days: drop them.
-			prof["bindings"] = data.get("bindings", {}) if int(data.get("bindings_v", 1)) >= 3 else {}
+			# v4: bindings are one keyboard slot + one pad slot per action. Older formats are dropped (defaults come back).
+			prof["bindings"] = data.get("bindings", {}) if int(data.get("bindings_v", 1)) >= 4 else {}
 			prof["show_retired"] = bool(data.get("show_retired", false))
 			var v := int(data.get("cards_v", 1))
 			if v < 2:   # one-time gift: the new sword cards

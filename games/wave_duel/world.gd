@@ -212,7 +212,7 @@ func read_move(dt: float) -> float:
 func read_fire() -> bool:
 	if auto:
 		return bot_hold
-	return Binds.held_excluding("fire", ["card", "custom"]) or Pad.shoot()
+	return Binds.held("fire") or Pad.shoot()
 
 # ------------------------------------------------------------------ custom screen
 func open_custom() -> void:
