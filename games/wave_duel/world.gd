@@ -424,37 +424,40 @@ func draw_defeated() -> void:
 	draw_shadow(float(me["x"]), mz, 0.34 * (1.0 - fall * 0.4))
 	draw_anim("duel_hero", "hurt", 0.3, float(me["x"]), mz, 0.0, Color(1.6 - fall * 0.6, 1.0, 1.0 + fall * 0.4, a), ME_SCALE, fall * 1.35, -0.22 * fall, sin(dead_t * 70.0) * 5.0 * clampf(1.0 - dead_t * 2.5, 0.0, 1.0))
 
-# The buster charge: a cyan EM-wave plume erupting from the left hand - fanned, wavy strands streaming up, no hard circle.
+# The buster charge: cyan EM-wave energy wrapped around the left glove, flaring off it and licking upward.
+# Drawn after the fighter, so it is always in FRONT of the hand; nothing is hidden behind it.
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
 	var s := p.z * ME_SCALE
 	var c := Vector2(p.x - 0.25 * s, p.y - 0.50 * s)     # the left glove, same depth as the body
-	var base := 2.5 + charge * 4.0
-	var length := s * (0.28 + charge * 0.55)
-	draw_circle(c, base * 2.2, Color(0.35, 0.85, 1.0, 0.16 + 0.12 * charge))
-	var strands := 11
+	var hand_r := s * 0.055
+	var length := s * (0.22 + charge * 0.46)
+	var amp := s * 0.03 * (0.6 + charge)
+	var strands := 14
 	for k in strands:
-		var f := float(k) / float(strands - 1) - 0.5                 # -0.5 .. 0.5 across the fan
-		var fan := f * 1.15
-		var len_k := length * (0.65 + 0.35 * absf(sin(float(k) * 1.7 + 0.6)))
-		var amp := s * 0.035 * (0.6 + charge)
-		var prev := c
-		var segs := 12
+		var th := TAU * float(k) / float(strands) + 0.3 * sin(t * 2.0)       # start points all round the glove
+		var out := Vector2(cos(th), sin(th))
+		var start := c + out * hand_r
+		var len_k := length * (0.55 + 0.45 * absf(sin(float(k) * 2.3 + 0.8)))
+		var prev := start
+		var segs := 11
 		for i in range(1, segs + 1):
 			var u := float(i) / float(segs)
-			var wob := sin(t * 7.0 - u * 6.5 + float(k) * 1.9) * amp * u
-			var ang := -PI * 0.5 + fan * (0.4 + u * 0.8)
-			var pt := c + Vector2(cos(ang), sin(ang)) * len_k * u + Vector2(wob, 0.0)
+			# leaves the glove outward, then curls up into a flame
+			var dir := (out * (1.0 - u) + Vector2(0.0, -1.0) * (0.35 + u)).normalized()
+			var wob := sin(t * 8.0 - u * 6.0 + float(k) * 1.7) * amp * u
+			var pt := start + dir * len_k * u + Vector2(wob, 0.0)
 			var fade := 1.0 - u
-			draw_line(prev, pt, Color(0.3, 0.8, 1.0, 0.45 * fade), 4.6 * fade + 0.8)
-			draw_line(prev, pt, Color(0.85, 1.0, 1.0, 0.9 * fade), 1.8 * fade + 0.4)
+			draw_line(prev, pt, Color(0.3, 0.8, 1.0, 0.5 * fade), 4.0 * fade + 0.7)
+			draw_line(prev, pt, Color(0.85, 1.0, 1.0, 0.9 * fade), 1.6 * fade + 0.4)
 			prev = pt
-	draw_circle(c, base, Color(0.7, 0.97, 1.0, 0.85))
-	draw_circle(c, base * 0.5, Color(1.0, 1.0, 1.0, 0.95))
+	# a thin glowing sleeve around the glove so it reads as wrapped, not spawned behind
+	draw_arc(c, hand_r * 1.15, 0.0, TAU, 20, Color(0.7, 0.97, 1.0, 0.5 + 0.3 * sin(t * 12.0)), 1.6)
+	draw_arc(c, hand_r * 1.7, 0.0, TAU, 20, Color(0.35, 0.85, 1.0, 0.25), 1.2)
 	if charge >= 1.0:
 		for i in 3:
 			var sp := fmod(t * 1.6 + float(i) * 0.33, 1.0)
-			draw_circle(c + Vector2(sin(t * 9.0 + float(i) * 2.0) * s * 0.05, -length * (0.5 + sp)), 1.6, Color(0.8, 1.0, 1.0, 1.0 - sp))
+			draw_circle(c + Vector2(sin(t * 9.0 + float(i) * 2.0) * s * 0.05, -length * (0.6 + sp)), 1.6, Color(0.8, 1.0, 1.0, 1.0 - sp))
 
 # ------------------------------------------------------------------ holographic shield and counter hits
 # Y raises a quick shield (about a second). It stops most shots, not waves or sword strikes, costs your buster
