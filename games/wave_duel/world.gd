@@ -42,9 +42,12 @@ const COUNTER_BONUS := 10.0
 const CLEARED_TIME := 3.4        # breathing room between opponents
 
 const ENEMIES := [
-	{"name": "Hardhat Drone", "sheet": "duel_buzzcap", "scale": 1.5, "hp": 70, "speed": 1.2, "react": 0.45, "fire": 1.1, "kind": "drone"},
-	{"name": "Wall Brute", "sheet": "duel_brute", "scale": 1.3, "hp": 130, "speed": 0.8, "react": 0.6, "fire": 2.3, "kind": "brute"},
-	{"name": "Rival Navi", "sheet": "duel_rival", "scale": 1.05, "hp": 150, "speed": 1.6, "react": 0.28, "fire": 0.95, "kind": "rival", "arc": true},
+	{"name": "Hardhat Drone", "sheet": "duel_buzzcap", "scale": 1.5, "hp": 70, "speed": 1.2, "react": 0.45, "fire": 1.1, "kind": "drone", "el": "spark",
+		"why": "Teaches the basics: a plain target with slow shots, and your first weakness to read (it is weak to Moss)."},
+	{"name": "Wall Brute", "sheet": "duel_brute", "scale": 1.3, "hp": 130, "speed": 0.8, "react": 0.6, "fire": 2.3, "kind": "brute", "el": "moss",
+		"why": "Teaches that a shield is not the answer to everything: its wave goes through, so you dodge it or outweigh it (weak to Ember)."},
+	{"name": "Rival Navi", "sheet": "duel_rival", "scale": 1.05, "hp": 150, "speed": 1.6, "react": 0.28, "fire": 0.95, "kind": "rival", "arc": true, "el": "ember",
+		"why": "The test of everything so far: she reads your cards, plays her own and lines up swords (weak to Tide)."},
 ]
 
 var bonus_hp := 0
@@ -410,6 +413,10 @@ func tick(dt: float) -> void:
 				banner_t = 0.9
 	elif phase == "cleared":
 		phase_t -= wdt
+		if phase_t < CLEARED_TIME - 1.9 and not reset_note_done:
+			reset_note_done = true
+			banner = "FOLDER RESHUFFLED   -   GAUGE RESET"
+			banner_t = 1.3
 		if phase_t < 1.3 and not next_called and round_i + 1 < ENEMIES.size():
 			next_called = true
 			banner = "NEXT   %s" % ENEMIES[round_i + 1]["name"]
@@ -565,6 +572,16 @@ func draw_lock_arrows(mz: float) -> void:
 # The opponent's meters worn as a quiet arc over its head: the outer band is health (it empties from the right, off-white,
 # warming to amber and then red as it drops), the thin inner band is its Custom gauge. It follows the body, so several
 # opponents could each carry their own.
+# A small coloured diamond with the element's name: the one place an element is shown next to the thing that has it.
+func draw_el_badge(f: Font, at: Vector2, el: String, size: int, alpha: float = 1.0) -> void:
+	if el == "" or not Cards.ELEMENTS.has(el):
+		return
+	var col := Color(Cards.ELEMENTS[el]["color"], alpha)
+	var d := float(size) * 0.55
+	draw_colored_polygon(PackedVector2Array([at + Vector2(0, -d), at + Vector2(d, 0), at + Vector2(0, d), at + Vector2(-d, 0)]), col)
+	draw_polyline(PackedVector2Array([at + Vector2(0, -d), at + Vector2(d, 0), at + Vector2(0, d), at + Vector2(-d, 0), at + Vector2(0, -d)]), Color(0, 0, 0, 0.6 * alpha), 1.0)
+	draw_string(f, at + Vector2(d + 5.0, size * 0.36), str(Cards.ELEMENTS[el]["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(col, alpha))
+
 func draw_foe_arc(e: Dictionary, fade: float) -> void:
 	var p := proj(float(foe["x"]), float(foe["z"]))
 	var md := meta(str(e["sheet"]))
@@ -594,6 +611,8 @@ func draw_foe_arc(e: Dictionary, fade: float) -> void:
 			draw_arc(c, r - 8.0, a0, a1 + 0.02, 4, Color(1, 1, 1, 0.14 * fade), 2.0)
 	var lab := place_text(Rect2(c.x - 50, c.y - r - 22, 100, 14))
 	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x, lab.position.y + 11), str(e["name"]).to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 1, 1, 0.6 * fade))
+	var eb := place_text(Rect2(c.x - 30, lab.position.y - 14, 70, 12))
+	draw_el_badge(ThemeDB.fallback_font, Vector2(eb.position.x + 8, eb.position.y + 6), str(e.get("el", "")), 10, 0.85 * fade)
 
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
@@ -738,6 +757,7 @@ func fight_step(dt: float) -> void:
 		banner = "DELETED!"
 		banner_t = 1.6
 		popup(float(me["x"]), 0.0, "HP +30", Color("90be6d"))
+		reset_between_rounds()
 		shots.clear()
 		if randf() < 0.55:
 			var cid := Cards.random_id()
@@ -749,6 +769,29 @@ func fight_step(dt: float) -> void:
 	if float(me["hp"]) <= 0.0:
 		banner = "DELETED..."
 		finish(false)
+
+# When an encounter ends, the turn ends with it: whatever you had queued is NOT spent, it goes back into the folder, the folder is
+# reshuffled and your Custom gauge starts empty - the same footing as the next opponent, whose gauge also starts empty.
+# WHY: each encounter starts clean and equal, and nothing you saved up is lost or carried over as an advantage.
+var reset_note_done := false
+func reset_between_rounds() -> void:
+	for id in queue:
+		draw_pile.append(id)
+	queue.clear()
+	if selecting:
+		for id in hand:
+			draw_pile.append(id)
+		hand.clear()
+		picked.clear()
+		selecting = false
+	draw_pile.append_array(used_pile)
+	used_pile.clear()
+	draw_pile.shuffle()
+	gauge = 0.0
+	locked = false
+	lock_bad_t = 0.0
+	charge = 0.0
+	reset_note_done = false
 
 func tick_fighter(f: Dictionary, dt: float) -> void:
 	f["shield_t"] = maxf(0.0, float(f["shield_t"]) - dt)
@@ -772,8 +815,8 @@ func move_fighter(f: Dictionary, dir: float, dt: float, mult: float) -> void:
 	var sp := 2.7 * mult * (1.6 if float(f["haste_t"]) > 0.0 else 1.0)
 	f["x"] = clampf(float(f["x"]) + dir * sp * dt, -FIELD_X + 0.2, FIELD_X - 0.2)
 
-func spawn(owner: int, x: float, z: float, vz: float, r: float, dmg: float, kind: String) -> void:
-	shots.append({"owner": owner, "x": x, "z": z, "vz": vz, "r": r, "dmg": dmg, "kind": kind, "done": false, "card": spawning_card and owner == 0})
+func spawn(owner: int, x: float, z: float, vz: float, r: float, dmg: float, kind: String, el: String = "") -> void:
+	shots.append({"owner": owner, "x": x, "z": z, "vz": vz, "r": r, "dmg": dmg, "kind": kind, "done": false, "card": spawning_card and owner == 0, "el": el})
 
 func update_shots(dt: float) -> void:
 	for s in shots:
@@ -794,7 +837,7 @@ func update_shots(dt: float) -> void:
 			if int(s["owner"]) == 1 and guard_t > 0.0:
 				dmg_in *= PIERCE_KEEP
 				popup(float(me["x"]), float(me["z"]), "SHIELD HOLDS (HALF)", Color("7df9ff"))
-			damage(target, dmg_in, int(s["owner"]), bool(s["card"]))
+			damage(target, dmg_in, int(s["owner"]), bool(s["card"]), str(s.get("el", "")))
 		elif int(s["owner"]) == 1 and gap < 0.3 + float(s["r"]) + 0.4:
 			near_misses += 1
 			if near_misses % 3 == 0:
@@ -802,11 +845,20 @@ func update_shots(dt: float) -> void:
 			popup(float(me["x"]), 0.0, "close!", Color("ffd166"))
 	shots = shots.filter(func(s): return float(s["z"]) > -1.5 and float(s["z"]) < FIELD_Z + 1.5)
 
-func damage(target: Dictionary, amount: float, owner: int, card: bool = false) -> void:
+func damage(target: Dictionary, amount: float, owner: int, card: bool = false, el: String = "") -> void:
 	if int(target["side"]) == 0:
 		if inv > 0.0:
 			return
 		inv = 0.35 * inv_time / 1.5
+	elif owner == 0 and el != "":
+		var foe_el := str(ENEMIES[mini(round_i, ENEMIES.size() - 1)].get("el", ""))
+		var mult := Cards.multiplier(el, foe_el)
+		if mult > 1.0:
+			amount *= mult
+			popup(float(target["x"]), float(target["z"]), "WEAK!", Color(Cards.ELEMENTS[el]["color"]))
+		elif mult < 1.0:
+			amount *= mult
+			popup(float(target["x"]), float(target["z"]), "resisted", Color(0.75, 0.75, 0.85))
 	if float(target["shield"]) > 0.0:
 		var absorbed := minf(float(target["shield"]), amount)
 		target["shield"] = float(target["shield"]) - absorbed
@@ -840,10 +892,10 @@ func use_card(owner: int, id: String) -> void:
 	var fx_ := float(f["x"])
 	spawning_card = (owner == 0 and not bonus_play)
 	match id:
-		"cannon": spawn(owner, fx_, z0, 7.0 * dz, 0.38, 40.0, "cannon")
+		"cannon": spawn(owner, fx_, z0, 7.0 * dz, 0.38, 40.0, "cannon", "ember")
 		"triple":
 			for dx in [-0.5, 0.0, 0.5]:
-				spawn(owner, fx_ + dx, z0, 12.0 * dz, 0.16, 15.0, "buster")
+				spawn(owner, fx_ + dx, z0, 12.0 * dz, 0.16, 15.0, "buster", "moss")
 		"gatling":
 			f["gat"] = 6
 			f["gat_t"] = 0.0
@@ -856,10 +908,10 @@ func use_card(owner: int, id: String) -> void:
 				foe["mw_id"] = id
 				foe["mw_aim"] = float(me["x"])
 		"tide":
-			spawn(owner, fx_, z0, 9.0 * dz, 0.9, 45.0, "tide")
+			spawn(owner, fx_, z0, 9.0 * dz, 0.9, 45.0, "tide", "tide")
 			if owner == 0:
 				swing_pose = 0.45
-		"wave": spawn(owner, fx_, z0, 6.0 * dz, 0.95, 35.0, "wave")
+		"wave": spawn(owner, fx_, z0, 6.0 * dz, 0.95, 35.0, "wave", "spark")
 		"heal": f["hp"] = minf(float(f["max"]), float(f["hp"]) + 40.0)
 		"barrier":
 			f["shield"] = 40.0
@@ -1469,10 +1521,47 @@ func hud_rect(id: String) -> Rect2:
 	return _hud_cache[id]
 
 # Returns a list of problems (empty = clean). Used by `--hudtest` and safe to call any time.
+# WHY every HUD element exists. The layout test fails if an element has no reason, so nothing here is decoration.
+const HUD_WHY := {
+	"title": "Tells you how far through the encounter you are.",
+	"foe_plate": "Backs the opponent's meters so they stay readable over a busy skyline.",
+	"foe_name": "Names who you are fighting (and shows what element they are).",
+	"foe_hp": "How close the opponent is to being deleted.",
+	"foe_gauge": "How close the opponent is to playing cards: you can see their tempo.",
+	"essence": "What this run has earned that you can take with you.",
+	"foe_custom": "Warns that the opponent is choosing cards right now.",
+	"panel": "Backs your meters, so they never fight the scenery.",
+	"hp_label": "Names the bar beside it.",
+	"hp_bar": "Your health.",
+	"buster_label": "Names the bar beside it.",
+	"buster_bar": "How charged your free shot is: release it when it is worth it.",
+	"custom_bar": "When you can choose cards again.",
+	"shield_bar": "When the shield is ready.",
+	"status": "Says what the lock-on and your next card need right now.",
+	"slot0": "The first card you will play.",
+	"slot1": "The second card you will play.",
+	"slot2": "The third card you will play.",
+	"hint": "The controls, for someone who has not learned them yet.",
+	"banner": "Announces what just happened, large, so you cannot miss it.",
+}
+
+func why_problems() -> Array:
+	var out: Array = []
+	for it in hud_items():
+		if str(HUD_WHY.get(str(it["id"]), "")) == "":
+			out.append("HUD element '%s' has no stated reason (add it to HUD_WHY)" % it["id"])
+	for id in Cards.CARDS:
+		if str(Cards.CARDS[id].get("why", "")) == "":
+			out.append("card '%s' has no stated reason" % id)
+	for e in ENEMIES:
+		if str(e.get("why", "")) == "":
+			out.append("opponent '%s' has no stated reason" % e["name"])
+	return out
+
 func layout_problems() -> Array:
 	var f := ThemeDB.fallback_font
 	var items := hud_items()
-	var out: Array = []
+	var out: Array = why_problems()
 	for i in items.size():
 		var a: Dictionary = items[i]
 		var ra: Rect2 = a["rect"]
@@ -1517,6 +1606,7 @@ func draw_hud(f: Font) -> void:
 		draw_rect(hud_rect("foe_plate"), plate)
 		draw_rect(hud_rect("foe_plate"), Color(1, 1, 1, 0.2), false, 1.0)
 		hud_text(f, "foe_name", str(e["name"]), Color.WHITE, 18, HORIZONTAL_ALIGNMENT_CENTER)
+		draw_el_badge(f, Vector2(hud_rect("foe_name").position.x + 10, hud_rect("foe_name").position.y + 11), str(e.get("el", "")), 11)
 		hud_bar("foe_hp", float(foe["hp"]) / float(foe["max"]), Color("e63946"))
 		hud_bar("foe_gauge", foe_gauge, Color("ff9f1c"))   # the opponent's Custom gauge, so tempo is visible
 	var parts: Array = []
@@ -1580,6 +1670,10 @@ func draw_custom(f: Font) -> void:
 	draw_string(f, Vector2(0, 110), "CUSTOM", HORIZONTAL_ALIGNMENT_CENTER, W, 34, Color("ffd166"))
 	var sub := "TIME STOPPED - take your time" if (not PVP or foe_selecting > 0.0) else "time is nearly stopped - the opponent has not set cards yet"
 	draw_string(f, Vector2(0, 138), sub, HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
+	var foe_e: Dictionary = ENEMIES[mini(round_i, ENEMIES.size() - 1)]
+	var weak := Cards.weak_to(str(foe_e.get("el", "")))
+	if weak != "":
+		draw_string(f, Vector2(0, 160), "%s is %s  -  weak to %s" % [foe_e["name"], str(foe_e["el"]).to_upper(), str(Cards.ELEMENTS[weak]["name"]).to_upper()], HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(Cards.ELEMENTS[weak]["color"]))
 	for i in hand.size():
 		var c: Dictionary = Cards.CARDS[hand[i]]
 		var r := Rect2(56 + i * 172, 170, 160, 230)
@@ -1587,6 +1681,8 @@ func draw_custom(f: Font) -> void:
 		draw_rect(r, Color(0.05, 0.05, 0.1, 0.96))
 		draw_rect(Rect2(r.position, Vector2(r.size.x, 56)), Color(c["color"]).darkened(0.35))
 		draw_string(f, Vector2(r.position.x, r.position.y + 36), str(c["name"]), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Color.WHITE)
+		if str(c.get("el", "")) != "":
+			draw_el_badge(f, Vector2(r.position.x + 14, r.position.y + 49), str(c["el"]), 11)
 		draw_multiline_string(f, Vector2(r.position.x + 10, r.position.y + 96), str(c["desc"]), HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20, 14, 4, Color(1, 1, 1, 0.8))
 		draw_rect(r, Color(c["color"]) if not on else Color("ffd166"), false, 3.0 if on else 1.5)
 		if i == cur:

@@ -27,6 +27,9 @@ Godot 4.3, Compatibility renderer. Save data is NOT in this folder: `%APPDATA%\G
 - Opponent sword attacks wind up 0.5s aimed at where you stood.
 - Untuned guesses worth feel-testing: shield duration/cooldown, buster damage, custom gauge time, counter bonus.
 
+## Design intent
+See `docs/DESIGN_INTENT.md`. Every card / element / opponent / HUD element needs a "why"; `--hudtest` enforces it. Elements: Ember>Moss>Spark>Tide>Ember (x2 / x0.5). Between opponents the queue returns to the folder, the folder reshuffles and gauges reset. New tests: `--elementtest`, `--locktest`, `--cleartest`.
+
 ## Controls (Esc > Controls)
 Every action has ONE keyboard slot and ONE controller slot (`binds.gd`). Picking a new button REPLACES the slot; if another action in the same
 group (duel / platformer / menus) used that button it loses it. Backspace (or pad left/top button) resets a row; the last row resets everything.

@@ -175,6 +175,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--elementtest" in args:
+		run_elementtest()
+		return
 	if "--locktest" in args:
 		run_locktest()
 		return
@@ -1453,4 +1456,40 @@ func run_locktest() -> void:
 	print("pushed out of line: locked=", w.locked, " (breaks after %.2fs)" % w.LOCK_GRACE)
 	ok = ok and not w.locked
 	print("LOCK-ON OK" if ok else "LOCK-ON BROKEN")
+	get_tree().quit()
+
+# Elements (weak / neutral / resisted) and the clean slate between opponents.
+func run_elementtest() -> void:
+	var idx := 0
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	start_play(carts[idx], false)
+	await get_tree().create_timer(2.4).timeout
+	var w = runner
+	var ok := true
+	w.foe["frozen_t"] = 99.0
+	# round 1: the Hardhat Drone is SPARK. Moss beats Spark, Spark beats Tide.
+	for pair in [["moss", 20.0], ["ember", 10.0], ["tide", 5.0], ["", 10.0]]:
+		var before: float = w.foe["hp"]
+		w.damage(w.foe, 10.0, 0, true, str(pair[0]))
+		var dealt: float = before - float(w.foe["hp"])
+		print("vs SPARK, a 10-damage %s hit deals %.1f (expect %.1f)" % [pair[0] if pair[0] != "" else "neutral", dealt, pair[1]])
+		ok = ok and absf(dealt - float(pair[1])) < 0.01
+		w.foe["hp"] = before
+	# the clean slate: queued cards go back to the folder, nothing is lost, the gauge starts empty
+	var folder_size: int = w.draw_pile.size() + w.used_pile.size() + w.queue.size() + w.hand.size()
+	w.queue = ["slash", "tide"]
+	w.used_pile.append("cannon")
+	w.draw_pile.pop_back()
+	w.draw_pile.pop_back()
+	w.draw_pile.pop_back()    # (the three that are now in the queue / used pile)
+	w.gauge = 0.7
+	w.charge = 0.8
+	w.foe["hp"] = 0.0
+	await get_tree().create_timer(0.4).timeout
+	var after: int = w.draw_pile.size() + w.used_pile.size() + w.queue.size() + w.hand.size()
+	print("after clearing the opponent: phase=%s queue=%d gauge=%.2f charge=%.2f cards in folder %d (was %d)" % [w.phase, w.queue.size(), w.gauge, w.charge, after, folder_size])
+	ok = ok and w.phase == "cleared" and w.queue.is_empty() and w.gauge == 0.0 and w.charge == 0.0 and after == folder_size - 0 + 0
+	print("ELEMENTS OK" if ok else "ELEMENTS BROKEN")
 	get_tree().quit()
