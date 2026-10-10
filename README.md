@@ -25,8 +25,8 @@ made by my own Python 3D-to-pixel-art tools.
 | ![Custom screen](docs/screenshots/custom_screen.png) | ![Counter hit](docs/screenshots/counter_hit.png) |
 | ![Holo shield](docs/screenshots/holo_shield.png) | ![Chip folder](docs/screenshots/chip_folder.png) |
 
-**The hub** - a Wolfenstein-style raycaster with sprite props. Walk toward a portal and the world bends: a screen-space warp shader swirls the picture into it,
-the portal swells to fill your view, and past a ring on the floor you lose control and are pulled in. A per-world `dread` setting scales the effect.
+**The hub** - a small isometric room you walk around. Three things to walk up to: the computer (jack in to a world), the card binder (build your folder) and the shop.
+Jacking in bends the screen with a warp shader on the way into the Bridge. (An earlier first-person hub is still in the code, `hub3d.gd`, behind a switch.)
 
 ![Portal warp](docs/screenshots/portal_warp.png)
 

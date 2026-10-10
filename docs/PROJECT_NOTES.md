@@ -27,6 +27,13 @@ Godot 4.3, Compatibility renderer. Save data is NOT in this folder: `%APPDATA%\G
 - Opponent sword attacks wind up 0.5s aimed at where you stood.
 - Untuned guesses worth feel-testing: shield duration/cooldown, buster damage, custom gauge time, counter bonus.
 
+## The hub room (current)
+The hub is an isometric room (`room.gd`): you walk around it (8 facings, `tools/room_hero_render.py` -> `art/room_hero.png`), and walk up to three things:
+the computer (opens a "JACK IN" list of worlds + "Fuse two worlds"), the card binder (the chip folder) and the shop (not built yet - says so).
+Furniture is placeholder boxes until the room is dressed to look like the owner's real room (their panorama is private: never commit it, only art made from it).
+`USE_ROOM` in `main.gd` switches back to the old first-person hub (`hub3d.gd`). Test: `--roomtest`; screenshot flags: `--roompos=x,y,facing`, `--roommenu`.
+Title/boot: `--title --titlet=SECONDS [--titlemenu]`, `--titletest`. Logo: `tools/title_render.py`. The splash name is `STUDIO` in `main.gd`.
+
 ## Design intent
 See `docs/DESIGN_INTENT.md`. Every card / element / opponent / HUD element needs a "why"; `--hudtest` enforces it. Elements: Ember>Moss>Spark>Tide>Ember (x2 / x0.5). Between opponents the queue returns to the folder, the folder reshuffles and gauges reset. New tests: `--elementtest`, `--locktest`, `--cleartest`.
 

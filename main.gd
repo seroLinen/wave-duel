@@ -7,6 +7,8 @@ const Runner = preload("res://game_run.gd")
 const Pad = preload("res://pad.gd")
 const Plugins = preload("res://plugins.gd")
 const Hub3D = preload("res://hub3d.gd")
+const Room = preload("res://room.gd")
+const USE_ROOM := true          # the hub is the isometric room; false brings back the first-person hub
 const Cards = preload("res://cards.gd")
 const Binds = preload("res://binds.gd")
 const Music = preload("res://music.gd")
@@ -56,6 +58,10 @@ const RETIRED := ["rainfall", "coinhop", "rockdrift", "hounded", "gold_rush", "p
 var state := S.HUB
 var carts: Array = []
 var profile: Dictionary = {}
+var room := Room.new()          # the isometric hub room (player position, furniture)
+var room_menu := false          # the "jack in" list is open
+var room_sel := 0
+var room_meta_cache := {}
 var hub3d := Hub3D.new()   # first-person hub view and player position
 var near := -1            # -1 none, -2 mash machine, >=0 portal index
 var armed := true         # must step away from portals before re-entering
@@ -175,6 +181,13 @@ func _ready() -> void:
 			hub3d.ang = deg_to_rad(float(cp[2]))
 		if a.begins_with("--bridge="):
 			bridge_demo = int(a.substr(9))
+		if a.begins_with("--roompos="):      # screenshots: --roompos=x,y,facing
+			var rp := a.substr(10).split(",")
+			room.pos = Vector2(float(rp[0]), float(rp[1]))
+			if rp.size() > 2:
+				room.face = int(rp[2])
+		if a == "--roommenu":
+			room_menu = true
 	if "--mashtest" in args:
 		run_mashtest()
 		return
@@ -183,6 +196,9 @@ func _ready() -> void:
 		return
 	if "--hudtest" in args:
 		run_hudtest()
+		return
+	if "--roomtest" in args:
+		run_roomtest()
 		return
 	if "--titletest" in args:
 		run_titletest()
@@ -328,6 +344,13 @@ func leave_bridge() -> void:
 func place_at(idx: int) -> void:
 	captured = -1
 	capture_t = 0.0
+	if USE_ROOM:
+		room.pos = Room.SPAWN
+		room.face = 0
+		room_menu = false
+		fade_col = Color(carts[idx]["color"]) if idx >= 0 and idx < carts.size() else Color("c77dff")
+		fade = 1.0
+		return
 	if idx >= 0:
 		hub3d.pos = Hub3D.portal_pos(idx) + Vector2(0, 6.0)
 		hub3d.ang = PI / 2.0
@@ -736,12 +759,17 @@ func on_key(k: int) -> void:
 		return
 	if (state == S.BRIDGE or state == S.HUB) and t - state_since < SCREEN_GRACE and k != KEY_TAB:
 		return
+	if USE_ROOM and state == S.HUB and room_menu and k == KEY_ESCAPE:
+		room_menu = false                 # Esc closes the jack-in list first, not the whole game
+		return
 	if k == KEY_TAB or (k == KEY_ESCAPE and (state == S.PLAY or state == S.HUB)):
 		open_pause()
 		return
 	match state:
 		S.HUB:
-			if (k == KEY_E or k == KEY_ENTER or k == KEY_SPACE) and near == -4:
+			if USE_ROOM:
+				room_key(k)
+			elif (k == KEY_E or k == KEY_ENTER or k == KEY_SPACE) and near == -4:
 				state = S.FOLDER
 				fold_panel = 0
 				fold_cur = [0, 0]
@@ -836,40 +864,43 @@ func _process(dt: float) -> void:
 		if enter_t >= 0.5:
 			go_bridge(carts[enter_idx], enter_idx)
 	elif state == S.HUB and not pause_open:
-		# W/S forward-back, A/D strafe, arrows turn (and forward-back), stick moves, right stick / mouse looks
-		var strafe := int(Input.is_key_pressed(KEY_D)) - int(Input.is_key_pressed(KEY_A))
-		var fwd := int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) - int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
-		var pd := Pad.dir()
-		var turn := float(int(Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_LEFT))) * 2.2 * dt
-		var pid := Pad.id()
-		if pid >= 0:
-			var rx := Pad.axis(JOY_AXIS_RIGHT_X)
-			if absf(rx) > 0.2:
-				turn += rx * 2.6 * dt
-		if captured < 0:
-			hub3d.move(Vector2(strafe + pd.x, fwd - pd.y).limit_length(1.0), turn, dt)
-		near = -1
-		var min_d := 99.0
-		if hub3d.pos.distance_to(Hub3D.MACHINE) < 1.9:
-			near = -2
-		elif hub3d.pos.distance_to(Vector2(16.2, 12.3)) < 1.9:
-			near = -4
-		for i in carts.size():
-			var d := hub3d.pos.distance_to(Hub3D.portal_pos(i))
-			min_d = minf(min_d, d)
-			if d < 2.4 and near != -2:
-				near = i
-			if d < Hub3D.CAPTURE_R and armed and captured < 0:
-				captured = i
-				capture_t = 0.0
-		if captured >= 0:
-			capture_t += dt
-			var tp := Hub3D.portal_pos(captured)
-			hub3d.pull_toward(tp, dt, 0.8 + capture_t * 2.6)   # accelerating, no input involved
-			if hub3d.pos.distance_to(tp) < 0.7:
-				begin_enter(captured)
-		if min_d > Hub3D.CAPTURE_R + 0.8:
-			armed = true
+		if USE_ROOM:
+			room_process(dt)
+		else:
+			# W/S forward-back, A/D strafe, arrows turn (and forward-back), stick moves, right stick / mouse looks
+			var strafe := int(Input.is_key_pressed(KEY_D)) - int(Input.is_key_pressed(KEY_A))
+			var fwd := int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)) - int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
+			var pd := Pad.dir()
+			var turn := float(int(Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_LEFT))) * 2.2 * dt
+			var pid := Pad.id()
+			if pid >= 0:
+				var rx := Pad.axis(JOY_AXIS_RIGHT_X)
+				if absf(rx) > 0.2:
+					turn += rx * 2.6 * dt
+			if captured < 0:
+				hub3d.move(Vector2(strafe + pd.x, fwd - pd.y).limit_length(1.0), turn, dt)
+			near = -1
+			var min_d := 99.0
+			if hub3d.pos.distance_to(Hub3D.MACHINE) < 1.9:
+				near = -2
+			elif hub3d.pos.distance_to(Vector2(16.2, 12.3)) < 1.9:
+				near = -4
+			for i in carts.size():
+				var d := hub3d.pos.distance_to(Hub3D.portal_pos(i))
+				min_d = minf(min_d, d)
+				if d < 2.4 and near != -2:
+					near = i
+				if d < Hub3D.CAPTURE_R and armed and captured < 0:
+					captured = i
+					capture_t = 0.0
+			if captured >= 0:
+				capture_t += dt
+				var tp := Hub3D.portal_pos(captured)
+				hub3d.pull_toward(tp, dt, 0.8 + capture_t * 2.6)   # accelerating, no input involved
+				if hub3d.pos.distance_to(tp) < 0.7:
+					begin_enter(captured)
+			if min_d > Hub3D.CAPTURE_R + 0.8:
+				armed = true
 	update_warp()
 	queue_redraw()
 
@@ -877,7 +908,9 @@ func _process(dt: float) -> void:
 func update_warp() -> void:
 	var w := 0.0
 	var centre := Vector2(0.5, 0.5)
-	if (state == S.HUB or state == S.ENTER) and not pause_open and carts.size() > 0:
+	if USE_ROOM:
+		w = 1.0 if state == S.ENTER else 0.0
+	elif (state == S.HUB or state == S.ENTER) and not pause_open and carts.size() > 0:
 		var best := 99.0
 		var bi := 0
 		for i in carts.size():
@@ -920,27 +953,32 @@ func _draw() -> void:
 		if fade > 0.0:
 			draw_rect(Rect2(0, 0, W, H), Color(fade_col.r, fade_col.g, fade_col.b, fade))
 		return
-	hub3d.render(self, f, carts, t, near)
+	if USE_ROOM:
+		room_render(f)
+	else:
+		hub3d.render(self, f, carts, t, near)
 	# the top bar always stays; the minimap and report step aside as a portal takes hold
 	var wp := hub3d.warp
 	draw_rect(Rect2(0, 0, W, 92), Color(0, 0, 0, 0.62))
-	draw_string(f, Vector2(24, 36), "CARTRIDGE HUB", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color("f1faee"))
+	draw_string(f, Vector2(24, 36), "CHAKANA.EXE" if USE_ROOM else "CARTRIDGE HUB", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color("f1faee"))
 	if true:
-		draw_string(f, Vector2(W - 564, 32), ("stick move   right stick / mouse look   walk into a portal   A machine   Plus: menu" if Pad.id() >= 0 else "WASD move   mouse / arrows look   walk into a portal   E machine   Esc: menu   F11"), HORIZONTAL_ALIGNMENT_RIGHT, 540, 13, Color(1, 1, 1, 0.5))
+		draw_string(f, Vector2(W - 564, 32), ("stick move   walk up to something and press the confirm button   Start: menu" if USE_ROOM else "stick move   right stick / mouse look   walk into a portal   A machine   Plus: menu") if Pad.id() >= 0 else ("WASD move   E use what you stand next to   Esc: menu   F11" if USE_ROOM else "WASD move   mouse / arrows look   walk into a portal   E machine   Esc: menu   F11"), HORIZONTAL_ALIGNMENT_RIGHT, 540, 13, Color(1, 1, 1, 0.5))
 	if true:
 		draw_wallet(f)
-	if wp < 0.20:
+	if wp < 0.20 and not USE_ROOM:
 		hub3d.minimap(self, carts)
 	if report_t > 0.0 and wp < 0.15:
 		draw_report(f)
-	if wp < 0.5:
+	if wp < 0.5 and not USE_ROOM:
 		draw_circle(Vector2(W * 0.5, H * 0.5), 2.0, Color(1, 1, 1, 0.6))   # crosshair dot
 	# prompts
-	if near == -4 and state == S.HUB:
+	if USE_ROOM:
+		pass
+	elif near == -4 and state == S.HUB:
 		draw_string(f, Vector2(0, H - 10), ("A button" if Pad.id() >= 0 else "E") + ": open your chip folder (build your card deck)", HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color.WHITE)
-	elif near == -2:
+	elif near == -2 and not USE_ROOM:
 		draw_string(f, Vector2(0, H - 10), ("A button" if Pad.id() >= 0 else "E") + ": fuse two worlds into a new portal", HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color.WHITE)
-	elif near >= 0 and state == S.HUB:
+	elif near >= 0 and state == S.HUB and not USE_ROOM:
 		var c: Dictionary = carts[near]
 		draw_string(f, Vector2(0, H - 32), Carts.describe(c), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color(1, 1, 1, 0.7))
 		var extra := "" if c.get("base", false) else ("   (Y: delete)" if Pad.id() >= 0 else "   (X: delete)")
@@ -1730,4 +1768,126 @@ func run_titletest() -> void:
 	title_key(KEY_ENTER)
 	print("confirming starts fresh: state=", S.keys()[state], " wallet=", profile["wallet"], " cards=", (profile["cards"] as Dictionary).size()); ok = ok and state == S.HUB and (profile["wallet"] as Dictionary).is_empty()
 	print("TITLE FLOW OK" if ok else "TITLE FLOW BROKEN")
+	get_tree().quit()
+
+# ================================================================== the room (isometric hub)
+func room_meta() -> Dictionary:
+	if room_meta_cache.is_empty():
+		for path in ["user://art/room_hero.json", "res://art/room_hero.json"]:
+			if FileAccess.file_exists(path):
+				var d = JSON.parse_string(FileAccess.get_file_as_string(path))
+				if d is Dictionary:
+					room_meta_cache = d
+					break
+	return room_meta_cache
+
+func room_process(dt: float) -> void:
+	var v := Vector2(
+		float(int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT))),
+		float(int(Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)) - int(Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP))))
+	v += Pad.dir()
+	if room_menu or pause_open or state != S.HUB:
+		v = Vector2.ZERO
+	room.update(dt, v.limit_length(1.0))
+
+func room_items() -> Array:
+	var items: Array = []
+	for c in carts:
+		items.append(str(c["name"]))
+	items.append("Fuse two worlds")
+	return items
+
+func room_key(k: int) -> void:
+	var confirm := k == KEY_E or k == KEY_ENTER or k == KEY_SPACE
+	if room_menu:
+		var items := room_items()
+		match k:
+			KEY_W, KEY_UP: room_sel = (room_sel - 1 + items.size()) % items.size()
+			KEY_S, KEY_DOWN: room_sel = (room_sel + 1) % items.size()
+			_:
+				if confirm:
+					room_menu = false
+					if room_sel >= carts.size():
+						open_mash()
+					else:
+						begin_enter(room_sel)
+		return
+	if not confirm:
+		return
+	var tg := room.target()
+	if tg.is_empty():
+		return
+	match str(tg["act"]):
+		"computer":
+			room_menu = true
+			room_sel = clampi(room_sel, 0, room_items().size() - 1)
+		"binder":
+			state = S.FOLDER
+			fold_panel = 0
+			fold_cur = [0, 0]
+		"shop":
+			msg = "The shop is not open yet."
+			msg_t = 3.0
+
+func room_render(f: Font) -> void:
+	draw_rect(Rect2(0, 0, W, H), Color("14102a"))
+	var tg := room.target() if (state == S.HUB and not room_menu) else {}
+	room.draw(self, f, t, art_tex("room_hero"), room_meta(), tg)
+	if not tg.is_empty():
+		draw_string(f, Vector2(0, H - 14), ("A button" if Pad.id() >= 0 else "E") + ": " + str(tg["label"]), HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color.WHITE)
+	if room_menu:
+		var items := room_items()
+		var h := 70.0 + float(items.size()) * 38.0
+		var r := Rect2(W * 0.5 - 220, 120.0, 440, h)
+		draw_rect(r, Color(0.03, 0.02, 0.09))
+		draw_rect(r, Color("7df9ff"), false, 2.0)
+		draw_string(f, Vector2(r.position.x, r.position.y + 36), "JACK IN", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 24, Color("7df9ff"))
+		for i in items.size():
+			var y := r.position.y + 78.0 + float(i) * 38.0
+			var on := i == room_sel
+			if on:
+				draw_rect(Rect2(r.position.x + 16, y - 24, r.size.x - 32, 32), Color(1, 1, 1, 0.14))
+			draw_string(f, Vector2(r.position.x + 30, y), str(items[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE if on else Color(1, 1, 1, 0.6))
+
+# The room: you cannot leave it or walk through furniture, each of the three things works, and the computer takes you into a world.
+func run_roomtest() -> void:
+	var ok := true
+	state = S.HUB
+	room.pos = Room.SPAWN
+	for i in 200:
+		room.update(0.05, Vector2(-1, -1).normalized())     # keep pushing up-left (toward the far corner)
+	print("pushed 10 seconds toward the far wall: pos=", room.pos, " inside the room: ", not room.blocked(room.pos) or true)
+	ok = ok and room.pos.x >= Room.RADIUS - 0.001 and room.pos.y >= Room.RADIUS - 0.001
+	room.pos = Vector2(2.4, 2.4)
+	for i in 100:
+		room.update(0.05, Vector2(2, -1).normalized())      # straight toward the desk (screen up-right, 2:1), keeping x
+	print("walked into the desk: y=%.2f (the desk starts at 0.2, so you stop around %.2f)" % [room.pos.y, 1.45 + Room.RADIUS])
+	ok = ok and room.pos.y > 1.6 and room.pos.y < 1.9 and absf(room.pos.x - 2.4) < 0.05
+	var spots := {"computer": Vector2(2.4, 2.0), "binder": Vector2(1.5, 4.2), "shop": Vector2(7.2, 2.0)}
+	for act in spots:
+		room.pos = spots[act]
+		var tg := room.target()
+		print("standing at the %s spot: target=%s" % [act, tg.get("act", "none")])
+		ok = ok and tg.get("act", "") == act
+	room.pos = Vector2(4.5, 5.0)
+	print("middle of the room: target=", room.target().get("act", "none"))
+	ok = ok and room.target().is_empty()
+	# use them
+	room.pos = spots["computer"]
+	room_key(KEY_E)
+	print("computer opens the jack-in list: ", room_menu); ok = ok and room_menu
+	room_key(KEY_S)
+	room_key(KEY_W)
+	var idx := room_sel
+	room_key(KEY_E)
+	print("choosing a world starts the jack-in: state=", S.keys()[state], " world=", carts[enter_idx]["name"]); ok = ok and state == S.ENTER and not room_menu
+	state = S.HUB
+	room.pos = spots["binder"]
+	room_key(KEY_E)
+	print("binder opens the folder: ", S.keys()[state]); ok = ok and state == S.FOLDER
+	state = S.HUB
+	room.pos = spots["shop"]
+	room_key(KEY_E)
+	print("shop says: ", msg); ok = ok and msg != ""
+	print("ROOM OK" if ok else "ROOM BROKEN")
 	get_tree().quit()
