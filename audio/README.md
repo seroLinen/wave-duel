@@ -1,7 +1,7 @@
 # Audio
 
-Track names the game looks for: `hub` (the room, Bridge, menus), `duel` (Wave Duel), `title` (the title screen, starts when the logo appears),
-and the one-shot jingles `victory` and `defeat` (the background music fades out while they play). Add a `loops.json` next to them for any track
+Track names the game looks for: `hub` (the room, Bridge, menus), `battle` (normal encounters), `boss` (the Navi), `title` (the title screen, starts when the logo appears),
+and the one-shot jingles `victory` and `defeat` (the background music fades out while they play). To import finished tracks from a music-export folder in one go, run `python tools/import_music.py <folder>` (or put the path in `music_path.txt`); it reads the folder's `music_manifest.json`, maps each role to a game track name and writes `loops.json`. Or add a `loops.json` next to them by hand for any track
 that should loop from a point other than the start, e.g. `{"title": 3.749977}` (the title theme's first play has an intro its repeats skip).
  It looks in `audio/_local/` first (your private tracks win), then `audio/music/` (the public set). Press **M** in game to mute.
 

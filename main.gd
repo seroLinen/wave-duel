@@ -743,7 +743,7 @@ func note_state() -> void:
 		if state == S.TITLE:
 			want = "title" if music.find("title") != null else "hub"
 		elif state == S.PLAY and runner != null and str(runner.recipe.get("id", "")) == "wave_duel":
-			want = "duel"
+			want = "battle"
 		music.play_track(want)
 
 func write_log(line: String) -> void:
@@ -843,6 +843,8 @@ func _process(dt: float) -> void:
 	if state == S.TITLE:
 		title_t += dt
 	note_state()
+	if state == S.PLAY and runner != null and str(runner.recipe.get("id", "")) == "wave_duel" and runner.phase != "result":
+		music.play_track(duel_track())        # normal encounters get the battle theme, the Navi gets the boss theme
 	if state == S.TITLE:        # the title music starts when the title appears, not during the splashes
 		music.play_track(("title" if music.find("title") != null else "hub") if title_t >= TITLE_AT else "")
 	msg_t = maxf(0.0, msg_t - dt)
@@ -1459,7 +1461,7 @@ func run_padtest() -> void:
 	get_tree().quit()
 
 func run_musictest() -> void:
-	for tr in ["hub", "duel", "title", "victory", "defeat"]:
+	for tr in ["hub", "battle", "boss", "title", "victory", "defeat"]:
 		var st: AudioStream = music.find(tr)
 		print(tr, ": ", "not found" if st == null else "loaded, %.1f s, loops=%s, loop offset=%.2f" % [st.get_length(), (st as AudioStreamOggVorbis).loop, (st as AudioStreamOggVorbis).loop_offset])
 	music.play_track("duel")
@@ -1590,6 +1592,13 @@ func run_elementtest() -> void:
 	get_tree().quit()
 
 # ================================================================== title / boot
+func duel_track() -> String:
+	var want := "boss" if (runner.has_method("is_navi_round") and runner.is_navi_round()) else "battle"
+	for cand in [want, "battle", "duel", "hub"]:        # whatever exists, best first
+		if music.find(cand) != null:
+			return cand
+	return want
+
 func enter_title() -> void:
 	state = S.TITLE
 	title_t = 0.0

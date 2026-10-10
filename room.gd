@@ -143,13 +143,13 @@ func draw_room_shell(c: CanvasItem, t: float) -> void:
 	# floor: soft carpet in two close tones
 	for i in int(ROOM_W):
 		for j in int(ROOM_D):
-			var col := Color("52465f") if (i + j) % 2 == 0 else Color("4d4159")
+			var col := Color("b5a892") if (i + j) % 2 == 0 else Color("aea08b")
 			_quad(c, [proj(i, j), proj(i + 1, j), proj(i + 1, j + 1), proj(i, j + 1)], col)
 	# the walls, warm and a little lavender in the dusk light
-	_quad(c, [proj(0, 0, 0), proj(0, ROOM_D, 0), proj(0, ROOM_D, WALL_H), proj(0, 0, WALL_H)], Color("7a6a8a"))      # the wall at x = 0
-	_quad(c, [proj(0, 0, 0), proj(ROOM_W, 0, 0), proj(ROOM_W, 0, WALL_H), proj(0, 0, WALL_H)], Color("655776"))      # the wall at y = 0
-	_quad(c, [proj(0, 0, 0), proj(0, ROOM_D, 0), proj(0, ROOM_D, 7), proj(0, 0, 7)], Color("a89c8c"))
-	_quad(c, [proj(0, 0, 0), proj(ROOM_W, 0, 0), proj(ROOM_W, 0, 7), proj(0, 0, 7)], Color("8f8478"))
+	_quad(c, [proj(0, 0, 0), proj(0, ROOM_D, 0), proj(0, ROOM_D, WALL_H), proj(0, 0, WALL_H)], Color("ddd2bd"))      # the wall at x = 0 (cream)
+	_quad(c, [proj(0, 0, 0), proj(ROOM_W, 0, 0), proj(ROOM_W, 0, WALL_H), proj(0, 0, WALL_H)], Color("c9bea9"))      # the wall at y = 0 (the same cream in shade)
+	_quad(c, [proj(0, 0, 0), proj(0, ROOM_D, 0), proj(0, ROOM_D, 7), proj(0, 0, 7)], Color("b9ab97"))
+	_quad(c, [proj(0, 0, 0), proj(ROOM_W, 0, 0), proj(ROOM_W, 0, 7), proj(0, 0, 7)], Color("a39683"))
 	c.draw_line(proj(0, 0, 0), proj(0, 0, WALL_H), Color(0, 0, 0, 0.3), 2.0)
 	_draw_right_wall(c, t)
 	_draw_left_wall(c)
