@@ -61,6 +61,8 @@ var profile: Dictionary = {}
 var room := Room.new()          # the isometric hub room (player position, furniture)
 var room_menu := false          # the "jack in" list is open
 var room_sel := 0
+var room_page := ""          # "" = the computer's desktop; otherwise worlds / wallet / report / apps
+var report_unread := false   # a finished run's report has not been read on the computer yet
 var room_meta_cache := {}
 var hub3d := Hub3D.new()   # first-person hub view and player position
 var near := -1            # -1 none, -2 mash machine, >=0 portal index
@@ -415,6 +417,7 @@ func return_to_hub(won: bool, sc: float) -> void:
 	Carts.save_profile(profile)
 	report = {"name": recipe["name"], "won": won, "score": sc, "gains": gains, "cards": won_cards}
 	report_t = 7.0
+	report_unread = true
 	var idx := -1
 	for i in carts.size():
 		if carts[i]["id"] == recipe["id"]:
@@ -963,16 +966,17 @@ func _draw() -> void:
 		hub3d.render(self, f, carts, t, near)
 	# the top bar always stays; the minimap and report step aside as a portal takes hold
 	var wp := hub3d.warp
-	draw_rect(Rect2(0, 0, W, 92), Color(0, 0, 0, 0.62))
-	draw_string(f, Vector2(24, 36), "CHAKANA.EXE" if USE_ROOM else "CARTRIDGE HUB", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color("f1faee"))
-	if true:
-		draw_string(f, Vector2(W - 564, 32), ("stick move   walk up to something and press the confirm button   Start: menu" if USE_ROOM else "stick move   right stick / mouse look   walk into a portal   A machine   Plus: menu") if Pad.id() >= 0 else ("WASD move   E use what you stand next to   Esc: menu   F11" if USE_ROOM else "WASD move   mouse / arrows look   walk into a portal   E machine   Esc: menu   F11"), HORIZONTAL_ALIGNMENT_RIGHT, 540, 13, Color(1, 1, 1, 0.5))
-	if true:
-		draw_wallet(f)
-	if wp < 0.20 and not USE_ROOM:
-		hub3d.minimap(self, carts)
-	if report_t > 0.0 and wp < 0.15:
-		draw_report(f)
+	if not USE_ROOM:
+		draw_rect(Rect2(0, 0, W, 92), Color(0, 0, 0, 0.62))
+		draw_string(f, Vector2(24, 36), "CHAKANA.EXE" if USE_ROOM else "CARTRIDGE HUB", HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color("f1faee"))
+		if true:
+			draw_string(f, Vector2(W - 564, 32), ("stick move   walk up to something and press the confirm button   Start: menu" if USE_ROOM else "stick move   right stick / mouse look   walk into a portal   A machine   Plus: menu") if Pad.id() >= 0 else ("WASD move   E use what you stand next to   Esc: menu   F11" if USE_ROOM else "WASD move   mouse / arrows look   walk into a portal   E machine   Esc: menu   F11"), HORIZONTAL_ALIGNMENT_RIGHT, 540, 13, Color(1, 1, 1, 0.5))
+		if true:
+			draw_wallet(f)
+		if wp < 0.20 and not USE_ROOM:
+			hub3d.minimap(self, carts)
+		if report_t > 0.0 and wp < 0.15:
+			draw_report(f)
 	if wp < 0.5 and not USE_ROOM:
 		draw_circle(Vector2(W * 0.5, H * 0.5), 2.0, Color(1, 1, 1, 0.6))   # crosshair dot
 	# prompts
@@ -1803,12 +1807,16 @@ func room_process(dt: float) -> void:
 		v = Vector2.ZERO
 	room.update(dt, v.limit_length(1.0))
 
+const ROOM_MAIN := ["WORLDS", "WALLET", "LAST RUN", "APPS"]
+
 func room_items() -> Array:
-	var items: Array = []
-	for c in carts:
-		items.append(str(c["name"]))
-	items.append("Fuse two worlds")
-	return items
+	if room_page == "worlds":
+		var items: Array = []
+		for c in carts:
+			items.append(str(c["name"]))
+		items.append("Fuse two worlds")
+		return items
+	return ROOM_MAIN
 
 func room_key(k: int) -> void:
 	var confirm := k == KEY_E or k == KEY_ENTER or k == KEY_SPACE
@@ -1817,13 +1825,30 @@ func room_key(k: int) -> void:
 		match k:
 			KEY_W, KEY_UP: room_sel = (room_sel - 1 + items.size()) % items.size()
 			KEY_S, KEY_DOWN: room_sel = (room_sel + 1) % items.size()
-			_:
-				if confirm:
+			KEY_ESCAPE:
+				if room_page == "":
 					room_menu = false
+				else:
+					room_page = ""
+					room_sel = 0
+			_:
+				if not confirm:
+					return
+				if room_page == "":
+					room_page = str(ROOM_MAIN[room_sel]).to_lower().replace(" ", "_")
+					room_sel = 0
+					if room_page == "last_run":
+						report_unread = false
+				elif room_page == "worlds":
+					room_menu = false
+					room_page = ""
 					if room_sel >= carts.size():
 						open_mash()
 					else:
 						begin_enter(room_sel)
+				else:
+					room_page = ""
+					room_sel = 0
 		return
 	if not confirm:
 		return
@@ -1833,7 +1858,8 @@ func room_key(k: int) -> void:
 	match str(tg["act"]):
 		"computer":
 			room_menu = true
-			room_sel = clampi(room_sel, 0, room_items().size() - 1)
+			room_page = ""
+			room_sel = 0
 		"binder":
 			state = S.FOLDER
 			fold_panel = 0
@@ -1844,23 +1870,83 @@ func room_key(k: int) -> void:
 
 func room_render(f: Font) -> void:
 	draw_rect(Rect2(0, 0, W, H), Color("14102a"))
+	room.notify = report_unread and not room_menu
 	var tg := room.target() if (state == S.HUB and not room_menu) else {}
-	room.draw(self, f, t, art_tex("room_hero"), room_meta(), tg)
-	if not tg.is_empty():
-		draw_string(f, Vector2(0, H - 14), ("A button" if Pad.id() >= 0 else "E") + ": " + str(tg["label"]), HORIZONTAL_ALIGNMENT_CENTER, W, 18, Color.WHITE)
+	room.draw(self, f, t, art_tex("room_hero"), room_meta(), tg, "A" if Pad.id() >= 0 else "E")
 	if room_menu:
-		var items := room_items()
-		var h := 70.0 + float(items.size()) * 38.0
-		var r := Rect2(W * 0.5 - 220, 120.0, 440, h)
-		draw_rect(r, Color(0.03, 0.02, 0.09))
-		draw_rect(r, Color("7df9ff"), false, 2.0)
-		draw_string(f, Vector2(r.position.x, r.position.y + 36), "JACK IN", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 24, Color("7df9ff"))
+		draw_computer(f)
+
+# The computer is the one place the numbers live: worlds, what you carry, what the last run brought back.
+func draw_computer(f: Font) -> void:
+	draw_rect(Rect2(0, 0, W, H), Color(0, 0, 0, 0.62))      # the room dims behind the screen
+	var win := Rect2(120, 52, 720, 400)
+	draw_rect(win, Color(0.03, 0.04, 0.10))
+	draw_rect(win, Color("7df9ff"), false, 2.0)
+	draw_rect(Rect2(win.position, Vector2(win.size.x, 30)), Color(0.08, 0.16, 0.26))
+	draw_string(f, Vector2(win.position.x + 14, win.position.y + 21), "CHAKANA.EXE" + ("" if room_page == "" else "   /   " + room_page.to_upper().replace("_", " ")), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("7df9ff"))
+	var x0 := win.position.x + 30
+	var y0 := win.position.y + 70
+	var items := room_items()
+	if room_page == "" or room_page == "worlds":
 		for i in items.size():
-			var y := r.position.y + 78.0 + float(i) * 38.0
+			var y := y0 + float(i) * 40.0
 			var on := i == room_sel
 			if on:
-				draw_rect(Rect2(r.position.x + 16, y - 24, r.size.x - 32, 32), Color(1, 1, 1, 0.14))
-			draw_string(f, Vector2(r.position.x + 30, y), str(items[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE if on else Color(1, 1, 1, 0.6))
+				draw_rect(Rect2(x0 - 12, y - 26, 300, 36), Color(1, 1, 1, 0.14))
+				draw_rect(Rect2(x0 - 12, y - 26, 300, 36), Color("ffd166"), false, 2.0)
+			draw_string(f, Vector2(x0, y), str(items[i]), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color.WHITE if on else Color(1, 1, 1, 0.6))
+			if room_page == "" and i == 2 and report_unread:
+				draw_circle(Vector2(x0 + 270, y - 8), 6.0, Color("ffd166"))
+		# a short note on the right about what the highlighted item is
+		var note := ""
+		if room_page == "":
+			note = ["Choose a world to jack in to.", "What you carry: essences, cards, how you are doing.", "What your last run brought back.", "Little apps. They will live here."][room_sel]
+		elif room_sel < carts.size():
+			note = Carts.describe(carts[room_sel])
+		else:
+			note = "Fuse two worlds into a new one."
+		draw_multiline_string(f, Vector2(win.position.x + 360, y0 - 20), note, HORIZONTAL_ALIGNMENT_LEFT, 330, 17, 5, Color(1, 1, 1, 0.75))
+	elif room_page == "wallet":
+		var wallet: Dictionary = profile["wallet"]
+		var y := y0
+		for key in Carts.ESSENCE.keys():
+			var e: Dictionary = Carts.ESSENCE[key]
+			draw_colored_polygon(PackedVector2Array([Vector2(x0, y - 14), Vector2(x0 + 9, y - 5), Vector2(x0, y + 4), Vector2(x0 - 9, y - 5)]), Color(e["color"]))
+			draw_string(f, Vector2(x0 + 22, y), "%s   %d" % [e["name"], int(wallet.get(e["name"], 0))], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
+			draw_string(f, Vector2(x0 + 260, y), str(e["how"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(e["color"]).darkened(0.05))
+			y += 36.0
+		var owned := 0
+		for cid in profile["cards"]:
+			owned += int(profile["cards"][cid])
+		draw_string(f, Vector2(x0, y + 14), "Cards owned: %d     Folder: %d / %d" % [owned, (profile["folder"] as Array).size(), Cards.MAX_FOLDER], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.75))
+	elif room_page == "last_run":
+		if report.is_empty():
+			draw_string(f, Vector2(x0, y0), "No runs yet.", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.7))
+		else:
+			var head: String = ("CLEARED  " if report["won"] else "RUN ENDED  ") + str(report["name"])
+			draw_string(f, Vector2(x0, y0), head, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("ffd166"))
+			draw_string(f, Vector2(x0, y0 + 30), "score %.1f" % float(report["score"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 1, 1, 0.6))
+			var gains: Dictionary = report["gains"]
+			var y := y0 + 76.0
+			if gains.is_empty():
+				draw_string(f, Vector2(x0, y), "Nothing brought back this time.", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.7))
+			else:
+				for sp in Carts.ESSENCE.keys():
+					var e: Dictionary = Carts.ESSENCE[sp]
+					if gains.has(e["name"]):
+						draw_string(f, Vector2(x0, y), "+%d %s" % [gains[e["name"]], e["name"]], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(e["color"]))
+						y += 30.0
+			var got: Array = report.get("cards", [])
+			if not got.is_empty():
+				var names: Array = []
+				for cid in got:
+					names.append(Cards.CARDS[cid]["name"])
+				draw_string(f, Vector2(x0, y + 14), "New card: " + ", ".join(names), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("ffd166"))
+	elif room_page == "apps":
+		draw_string(f, Vector2(x0, y0), "Nothing installed yet.", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
+		draw_multiline_string(f, Vector2(x0, y0 + 34), "The little mini-games will live here as apps, and what they pay out will show up in your wallet.", HORIZONTAL_ALIGNMENT_LEFT, 640, 16, 4, Color(1, 1, 1, 0.65))
+	var foot := "up / down: choose     confirm: open     back: " + ("close" if room_page == "" else "desktop")
+	draw_string(f, Vector2(win.position.x, win.end.y - 14), foot, HORIZONTAL_ALIGNMENT_CENTER, win.size.x, 13, Color(1, 1, 1, 0.45))
 
 # The room: you cannot leave it or walk through furniture, each of the three things works, and the computer takes you into a world.
 func run_roomtest() -> void:
@@ -1875,7 +1961,7 @@ func run_roomtest() -> void:
 	for i in 100:
 		room.update(0.05, Vector2(2, -1).normalized())      # straight toward the desk (screen up-right, 2:1), keeping x
 	print("walked into the desk: y=%.2f (the desk starts at 0.2, so you stop around %.2f)" % [room.pos.y, 1.45 + Room.RADIUS])
-	ok = ok and room.pos.y > 1.6 and room.pos.y < 1.9 and absf(room.pos.x - 3.0) < 0.05
+	ok = ok and room.pos.y > 1.6 and room.pos.y < 2.1 and absf(room.pos.x - 3.0) < 0.05
 	var spots := {"computer": Vector2(3.0, 2.2), "binder": Vector2(7.4, 2.0), "shop": Vector2(1.2, 2.8)}
 	for act in spots:
 		room.pos = spots[act]
@@ -1889,10 +1975,16 @@ func run_roomtest() -> void:
 	room.pos = spots["computer"]
 	room_key(KEY_E)
 	print("computer opens the jack-in list: ", room_menu); ok = ok and room_menu
-	room_key(KEY_S)
-	room_key(KEY_W)
-	var idx := room_sel
+	room_key(KEY_E)           # WORLDS
+	print("WORLDS page: ", room_page, " items=", room_items().size()); ok = ok and room_page == "worlds"
+	room_key(KEY_ESCAPE)
+	print("back goes to the desktop, not out of the game: page='", room_page, "' still open=", room_menu); ok = ok and room_page == "" and room_menu
+	room_key(KEY_S)           # WALLET
 	room_key(KEY_E)
+	print("WALLET page: ", room_page); ok = ok and room_page == "wallet"
+	room_key(KEY_E)           # back to the desktop (the cursor is on WORLDS again)
+	room_key(KEY_E)           # open WORLDS
+	room_key(KEY_E)           # the first world
 	print("choosing a world starts the jack-in: state=", S.keys()[state], " world=", carts[enter_idx]["name"]); ok = ok and state == S.ENTER and not room_menu
 	state = S.HUB
 	room.pos = spots["binder"]

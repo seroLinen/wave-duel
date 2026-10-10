@@ -12,7 +12,8 @@ const ROOM_W := 9.0
 const ROOM_D := 9.0
 const WALL_H := 100.0
 const OX := 480.0
-const OY := 196.0
+const OY := 166.0
+const K := 1.15               # overall scale: with no HUD on top, the room can fill the screen
 const RADIUS := 0.28
 const SPEED := 130.0          # screen pixels per second
 const REACH := 1.25           # how close you must be to a piece of furniture to use it
@@ -23,6 +24,7 @@ var pos := SPAWN
 var face := 0
 var walk_t := 0.0
 var moving := false
+var notify := false          # something new is waiting on the computer (a finished run's report): the monitor blinks a mail mark
 
 # "why" says what each piece is for; the interactive ones are the three the game is built around
 var furniture: Array = [
@@ -47,7 +49,7 @@ var furniture: Array = [
 ]
 
 func proj(x: float, y: float, z: float = 0.0) -> Vector2:
-	return Vector2(OX + (x - y) * TW * 0.5, OY + (x + y) * TH * 0.5 - z)
+	return Vector2(OX + (x - y) * TW * 0.5 * K, OY + (x + y) * TH * 0.5 * K - z * K)
 
 # a point on a wall: wall "L" is the plane x = 0 (u is y), wall "R" is the plane y = 0 (u is x); z is height
 func wp(wall: String, u: float, z: float) -> Vector2:
@@ -66,8 +68,8 @@ func wall_line(c: CanvasItem, wall: String, a: Vector2, b: Vector2, col: Color, 
 	c.draw_line(wp(wall, a.x, a.y), wp(wall, b.x, b.y), col, w)
 
 func screen_to_world_delta(sx: float, sy: float) -> Vector2:
-	var a := sx / (TW * 0.5)
-	var b := sy / (TH * 0.5)
+	var a := sx / (TW * 0.5 * K)
+	var b := sy / (TH * 0.5 * K)
 	return Vector2((a + b) * 0.5, (b - a) * 0.5)
 
 func solid_rects() -> Array:
@@ -224,18 +226,18 @@ func draw_hero(c: CanvasItem, tex: Texture2D, meta: Dictionary, shadow: bool = t
 	var feet := proj(pos.x, pos.y)
 	if shadow:
 		c.draw_set_transform(feet, 0.0, Vector2(1.0, 0.45))
-		c.draw_circle(Vector2.ZERO, 15.0, Color(0, 0, 0, 0.35))
+		c.draw_circle(Vector2.ZERO, 15.0 * K, Color(0, 0, 0, 0.35))
 		c.draw_set_transform_matrix(Transform2D.IDENTITY)
 	if tex == null or meta.is_empty():
 		c.draw_circle(feet - Vector2(0, 26), 12.0, Color("7df9ff"))
 		return
 	var fw := int(meta["fw"])
-	var size := 112.0
+	var size := 112.0 * K
 	var frame := int(walk_t * float(meta["fps"])) % int(meta["n"]) if moving else 0
 	var top_left := feet - Vector2(size * 0.5, size * float(meta["feet"]))
 	c.draw_texture_rect_region(tex, Rect2(top_left, Vector2(size, size)), Rect2(frame * fw, face * fw, fw, fw))
 
-func draw(c: CanvasItem, f: Font, t: float, tex: Texture2D, meta: Dictionary, tgt: Dictionary) -> void:
+func draw(c: CanvasItem, f: Font, t: float, tex: Texture2D, meta: Dictionary, tgt: Dictionary, key_label: String = "E") -> void:
 	draw_room_shell(c, t)
 	# furniture and the hero, back to front
 	var items: Array = []
@@ -267,7 +269,20 @@ func draw(c: CanvasItem, f: Font, t: float, tex: Texture2D, meta: Dictionary, tg
 			c.draw_colored_polygon(PackedVector2Array([proj(xf, yc - 0.12, 38.0), proj(xf, yc - 0.05, 38.0), proj(xf, yc - 0.05, 46.0), proj(xf, yc - 0.12, 46.0)]), Color("e0d2b0"))
 		if fu["id"] == "blanket":
 			draw_cat(c, t)
-	# the use-marker over whatever you are near
+	# a small blinking mark over the monitors when the computer has something new for you
+	if notify:
+		var m := proj(1.9, 0.5, 70.0)
+		if int(t * 2.0) % 2 == 0:
+			c.draw_circle(m, 9.0, Color("ffd166"))
+			c.draw_string(f, m + Vector2(-4, 6), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(0.1, 0.05, 0.2))
+	# the prompt belongs to the thing you stand next to: a small bubble above it, not a bar at the edge of the screen
 	if not tgt.is_empty():
-		var top := proj(float(tgt["x"]) + float(tgt["w"]) * 0.5, float(tgt["y"]) + float(tgt["d"]) * 0.5, float(tgt["h"]) + float(tgt.get("z0", 0.0)) + 26.0 + 4.0 * sin(t * 4.0))
-		c.draw_colored_polygon(PackedVector2Array([top + Vector2(-9, -8), top + Vector2(9, -8), top + Vector2(0, 4)]), Color("ffd166"))
+		var top := proj(float(tgt["x"]) + float(tgt["w"]) * 0.5, float(tgt["y"]) + float(tgt["d"]) * 0.5, float(tgt["h"]) + float(tgt.get("z0", 0.0)) + 20.0 + 3.0 * sin(t * 4.0))
+		var txt := "%s   %s" % [key_label, str(tgt["label"])]
+		var wtxt := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		var box := Rect2(top.x - wtxt * 0.5 - 10.0, top.y - 40.0, wtxt + 20.0, 26.0)
+		box.position.x = clampf(box.position.x, 8.0, 952.0 - box.size.x)
+		c.draw_colored_polygon(PackedVector2Array([Vector2(top.x - 7.0, box.end.y - 1.0), Vector2(top.x + 7.0, box.end.y - 1.0), Vector2(top.x, box.end.y + 8.0)]), Color(0.05, 0.04, 0.12, 0.95))
+		c.draw_rect(box, Color(0.05, 0.04, 0.12, 0.95))
+		c.draw_rect(box, Color("ffd166"), false, 2.0)
+		c.draw_string(f, Vector2(box.position.x + 10.0, box.position.y + 18.0), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
