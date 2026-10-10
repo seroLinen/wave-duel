@@ -18,12 +18,12 @@ const ACTIONS := [
 const DEFAULTS := {
 	"confirm": [{"t": "key", "c": KEY_E}, {"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_SPACE}, {"t": "joy", "c": JOY_BUTTON_A}],
 	"menu": [{"t": "key", "c": KEY_TAB}, {"t": "joy", "c": JOY_BUTTON_START}, {"t": "joy", "c": JOY_BUTTON_BACK}],
-	"fire": [{"t": "key", "c": KEY_SPACE}, {"t": "key", "c": KEY_J}, {"t": "joy", "c": JOY_BUTTON_X}, {"t": "joy", "c": JOY_BUTTON_B}, {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}],
+	"fire": [{"t": "key", "c": KEY_SPACE}, {"t": "key", "c": KEY_J}, {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}],   # + right trigger
 	"jump": [{"t": "key", "c": KEY_W}, {"t": "key", "c": KEY_UP}, {"t": "key", "c": KEY_ENTER}, {"t": "joy", "c": JOY_BUTTON_A}],
-	"custom": [{"t": "key", "c": KEY_Q}, {"t": "key", "c": KEY_C}, {"t": "joy", "c": JOY_BUTTON_LEFT_SHOULDER}],
+	"custom": [{"t": "key", "c": KEY_Q}, {"t": "key", "c": KEY_C}, {"t": "joy", "c": JOY_BUTTON_LEFT_SHOULDER}, {"t": "joy", "c": JOY_BUTTON_X}],
 	"card": [{"t": "key", "c": KEY_ENTER}, {"t": "key", "c": KEY_K}, {"t": "joy", "c": JOY_BUTTON_A}],
-	"lockon": [{"t": "key", "c": KEY_DOWN}, {"t": "key", "c": KEY_S}],   # a pad stick / D-pad pushed down also locks on
-	"shield": [{"t": "key", "c": KEY_V}, {"t": "key", "c": KEY_SHIFT}, {"t": "joy", "c": JOY_BUTTON_Y}],
+	"lockon": [{"t": "key", "c": KEY_DOWN}, {"t": "key", "c": KEY_S}, {"t": "joy", "c": JOY_BUTTON_Y}],   # a pad stick / D-pad pushed down also locks on
+	"shield": [{"t": "key", "c": KEY_V}, {"t": "key", "c": KEY_SHIFT}, {"t": "joy", "c": JOY_BUTTON_B}],
 }
 
 static var extra := {}   # action id -> Array of bindings added by the player

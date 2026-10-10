@@ -424,17 +424,30 @@ func draw_defeated() -> void:
 	draw_shadow(float(me["x"]), mz, 0.34 * (1.0 - fall * 0.4))
 	draw_anim("duel_hero", "hurt", 0.3, float(me["x"]), mz, 0.0, Color(1.6 - fall * 0.6, 1.0, 1.0 + fall * 0.4, a), ME_SCALE, fall * 1.35, -0.22 * fall, sin(dead_t * 70.0) * 5.0 * clampf(1.0 - dead_t * 2.5, 0.0, 1.0))
 
+# The buster charge: a small flame held at the cannon hand, licking upward, not a clean circle.
 func draw_charge_orb(mz: float) -> void:
-	var p := proj(float(me["x"]) - 0.14, mz + 1.7)    # out in front of the cannon
+	var p := proj(float(me["x"]), mz)
 	var s := p.z * ME_SCALE
-	var c := Vector2(p.x, p.y - 0.62 * s)
-	var r := 9.0 + charge * 30.0
-	var pulse := 1.0 + 0.08 * sin(t * 14.0) * charge
-	draw_circle(c, r * 1.7 * pulse, Color(0.4, 0.85, 1.0, 0.18 + 0.12 * charge))
-	draw_circle(c, r * pulse, Color(0.45, 0.9, 1.0, 0.6))
-	draw_circle(c, r * 0.55 * pulse, Color(0.92, 1.0, 1.0, 0.95))
+	var c := Vector2(p.x + 0.26 * s, p.y - 0.50 * s)     # the glove on the cannon arm, same depth as the body
+	var r := 3.5 + charge * 8.0
+	var flick := t * 17.0
+	var cols: Array = [Color(1.0, 0.32, 0.08, 0.55), Color(1.0, 0.62, 0.14, 0.75), Color(1.0, 0.95, 0.6, 0.95)]
+	var ks: Array = [1.0, 0.68, 0.38]
+	for layer in 3:
+		var k: float = ks[layer]
+		var pts := PackedVector2Array()
+		var n := 9
+		for i in n:
+			var a := TAU * float(i) / float(n)
+			var lick := 1.0 + 0.35 * sin(flick * (1.0 + 0.23 * float(i)) + float(i) * 2.1 + float(layer))
+			var up := maxf(0.0, -sin(a))     # tongues stretch upward
+			var rr := r * k * lick * (1.0 + 0.9 * up)
+			pts.append(c + Vector2(cos(a) * rr * 0.8, sin(a) * rr - up * r * 0.5 * k))
+		draw_colored_polygon(pts, cols[layer])
 	if charge >= 1.0:
-		draw_arc(c, r * 1.3, 0.0, TAU, 28, Color.WHITE, 2.0)
+		for i in 3:
+			var sp := fmod(t * 1.6 + float(i) * 0.33, 1.0)
+			draw_circle(c + Vector2(sin(t * 9.0 + float(i) * 2.0) * r * 0.6, -r * 0.8 - sp * r * 1.6), 1.6, Color(1.0, 0.85, 0.4, 1.0 - sp))
 
 # ------------------------------------------------------------------ holographic shield and counter hits
 # Y raises a quick shield (about a second). It stops most shots, not waves or sword strikes, costs your buster
@@ -1136,7 +1149,7 @@ func hud_items() -> Array:
 		{"id": "slot1", "rect": Rect2(736, 484, 96, 34), "parent": "panel", "size": 12, "samples": ["Wide Sword"], "inset": 14},
 		{"id": "slot2", "rect": Rect2(840, 484, 96, 34), "parent": "panel", "size": 12, "samples": ["Tide Blade"], "inset": 14},
 		{"id": "hint", "rect": Rect2(16, 522, 928, 14), "parent": "panel", "size": 11,
-			"samples": ["A/D move    Y: shield    Down: lock on (sword cards)    the buster charges itself - fire to release it    cards do the real damage    Esc: menu"]},
+			"samples": ["A/D move    Shield: right button    Lock on: top button / Down (sword cards)    fire (R) releases the buster    Esc: menu"]},
 		{"id": "banner", "rect": Rect2(180, 236, 600, 56), "size": 36, "samples": ["ROUND 3   Rival Navi", "ALL OPPONENTS DELETED", "YOU WERE DELETED", "COUNTER HIT!"]},
 	]
 	return items
@@ -1245,7 +1258,7 @@ func draw_hud(f: Font) -> void:
 			draw_rect(r, Color.WHITE if i == 0 else Color(1, 1, 1, 0.35), false, 2.0 if i == 0 else 1.0)
 		else:
 			draw_rect(r, Color(1, 1, 1, 0.16), false, 1.0)
-	hud_text(f, "hint", "A/D move    Y: shield    Down: lock on (sword cards)    the buster charges itself - fire to release it    cards do the real damage    Esc: menu", Color(1, 1, 1, 0.5), 11)
+	hud_text(f, "hint", "A/D move    Shield: right button    Lock on: top button / Down (sword cards)    fire (R) releases the buster    Esc: menu", Color(1, 1, 1, 0.5), 11)
 	if banner_t > 0.0:
 		var br := hud_rect("banner")
 		var a := clampf(banner_t * 2.0, 0.0, 1.0)
