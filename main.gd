@@ -272,6 +272,7 @@ func bridge_pick(i: int) -> void:
 	start_play(bridge_recipe, false, [b["id"]])
 
 func leave_bridge() -> void:
+	write_log("left the Bridge (last input: %s)" % last_input)
 	place_at(bridge_idx)
 	armed = false
 	state = S.HUB
@@ -359,7 +360,12 @@ func open_mash() -> void:
 func pad_key(b: int) -> int:
 	match b:
 		JOY_BUTTON_A: return KEY_E                           # confirm / interact
-		JOY_BUTTON_B: return KEY_ESCAPE if (state != S.PLAY or pause_open) else 0   # back (B shoots in games)
+		JOY_BUTTON_B:
+			# A Pro Controller's right-hand button arrives as "B". On the Bridge it is confirm, never back
+			# (it used to kick you out of the boon screen); Esc / the pause menu still leave.
+			if state == S.BRIDGE and not pause_open:
+				return KEY_E
+			return KEY_ESCAPE if (state != S.PLAY or pause_open) else 0   # back (B shoots in games)
 		JOY_BUTTON_START, JOY_BUTTON_BACK: return KEY_TAB   # menu
 		JOY_BUTTON_X, JOY_BUTTON_Y:
 			if state == S.MASH: return KEY_P
@@ -390,6 +396,7 @@ func log_input(e: InputEvent) -> void:
 		log_started = true
 
 func _input(e: InputEvent) -> void:
+	log_input(e)
 	if bind_mode == 2:   # listening: take the first button that arrives, whatever kind it is
 		var b := Binds.capture(e)
 		if not b.is_empty():

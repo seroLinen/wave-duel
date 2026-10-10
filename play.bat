@@ -7,4 +7,4 @@ set "G="
 if exist godot_path.txt set /p G=<godot_path.txt
 if not defined G if defined GODOT set "G=%GODOT%"
 if not defined G set "G=godot"
-start "" "%G%" --path "%~dp0"
+start "" "%G%" --path "%CD%"
