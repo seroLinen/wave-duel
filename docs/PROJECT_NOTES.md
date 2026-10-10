@@ -30,9 +30,10 @@ Godot 4.3, Compatibility renderer. Save data is NOT in this folder: `%APPDATA%\G
 ## Controls (Esc > Controls)
 Every action has ONE keyboard slot and ONE controller slot (`binds.gd`). Picking a new button REPLACES the slot; if another action in the same
 group (duel / platformer / menus) used that button it loses it. Backspace (or pad left/top button) resets a row; the last row resets everything.
-Defaults - keyboard: Space fire, Q Custom, Enter play card, Down lock on, V shield, E confirm, Tab menu, W jump.
+Defaults are the owner's own layout - DO NOT CHANGE THEM without asking. Keyboard: Space fire, Q Custom, Enter play card, Down lock on, V shield, E confirm, Tab menu, W jump.
 Controller (Godot names face buttons by POSITION: A bottom, B right, X left, Y top; a Pro Controller prints them B/A/Y/X):
-RB fire (ZR trigger always fires too), LB Custom, bottom play card / pick / confirm, top lock on, right shield, Start menu, stick/D-pad move + card cursor.
+bottom fire (ZR trigger always fires too), right play card / confirm, top shield, D-pad down lock on, RB Custom, Start menu, jump unbound, stick/D-pad move + card cursor.
+Option "Either bumper opens Custom" (default ON, saved as `both_bumpers`): LB also opens/confirms Custom unless another duel action has claimed LB.
 Raw pad buttons reach the game (no Steam translation); `input_log.txt` in the save folder records every input, screen change and controller connect.
 Saved bindings use `bindings_v` 4; older formats are dropped. Tests: `--bindtest`, `--padtest`, `--shieldtest`, `--flowtest`.
 Menus accept the D-pad as button events (one step per push); stick drift after a reconnect is handled in `pad.gd`.

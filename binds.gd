@@ -22,16 +22,21 @@ const GROUPS := [
 	["confirm", "menu"],                               # menus
 ]
 
+# The defaults are the layout the game was tuned and played with. (Pad buttons are by position: A bottom, B right, X left, Y top.)
 const DEFAULTS := {
-	"confirm": {"kb": {"t": "key", "c": KEY_E}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
+	"confirm": {"kb": {"t": "key", "c": KEY_E}, "pad": {"t": "joy", "c": JOY_BUTTON_B}},
 	"menu": {"kb": {"t": "key", "c": KEY_TAB}, "pad": {"t": "joy", "c": JOY_BUTTON_START}},
-	"fire": {"kb": {"t": "key", "c": KEY_SPACE}, "pad": {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}},
-	"jump": {"kb": {"t": "key", "c": KEY_W}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
-	"custom": {"kb": {"t": "key", "c": KEY_Q}, "pad": {"t": "joy", "c": JOY_BUTTON_LEFT_SHOULDER}},
-	"card": {"kb": {"t": "key", "c": KEY_ENTER}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
-	"lockon": {"kb": {"t": "key", "c": KEY_DOWN}, "pad": {"t": "joy", "c": JOY_BUTTON_Y}},
-	"shield": {"kb": {"t": "key", "c": KEY_V}, "pad": {"t": "joy", "c": JOY_BUTTON_B}},
+	"fire": {"kb": {"t": "key", "c": KEY_SPACE}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
+	"jump": {"kb": {"t": "key", "c": KEY_W}, "pad": {}},
+	"custom": {"kb": {"t": "key", "c": KEY_Q}, "pad": {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}},
+	"card": {"kb": {"t": "key", "c": KEY_ENTER}, "pad": {"t": "joy", "c": JOY_BUTTON_B}},
+	"lockon": {"kb": {"t": "key", "c": KEY_DOWN}, "pad": {"t": "joy", "c": JOY_BUTTON_DPAD_DOWN}},
+	"shield": {"kb": {"t": "key", "c": KEY_V}, "pad": {"t": "joy", "c": JOY_BUTTON_Y}},
 }
+
+# Option: either shoulder button opens Custom once the gauge is full (as in the games this is inspired by).
+# The extra bumper is only used if no other duel action has claimed it.
+static var both_bumpers := true
 
 static var map := {}   # action id -> {"kb": binding, "pad": binding}
 
@@ -121,6 +126,18 @@ static func matches(action: String, e: InputEvent) -> bool:
 	for b in all_for(action):
 		if hit(b, e):
 			return true
+	if action == "custom" and both_bumpers and e is InputEventJoypadButton and e.pressed:
+		var other := -1
+		if e.button_index == JOY_BUTTON_LEFT_SHOULDER:
+			other = JOY_BUTTON_LEFT_SHOULDER
+		elif e.button_index == JOY_BUTTON_RIGHT_SHOULDER:
+			other = JOY_BUTTON_RIGHT_SHOULDER
+		if other >= 0:
+			var taken := false
+			for a in GROUPS[0]:
+				if a != "custom" and same(get_slot(str(a), "pad"), {"t": "joy", "c": other}):
+					taken = true
+			return not taken
 	return false
 
 static func down(b: Dictionary) -> bool:

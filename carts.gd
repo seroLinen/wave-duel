@@ -106,6 +106,7 @@ static func load_profile() -> Dictionary:
 			prof["bindings"] = data.get("bindings", {}) if int(data.get("bindings_v", 1)) >= 4 else {}
 			prof["show_retired"] = bool(data.get("show_retired", false))
 			prof["music"] = bool(data.get("music", true))
+			prof["both_bumpers"] = bool(data.get("both_bumpers", true))
 			var v := int(data.get("cards_v", 1))
 			if v < 2:   # one-time gift: the new sword cards
 				var owned: Dictionary = prof["cards"]

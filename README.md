@@ -52,7 +52,7 @@ Re-render art (needs Python 3, Pillow, numpy): `python tools/anim_render.py` and
 
 Controls (all rebindable under Esc > Controls, one keyboard key and one controller button per action): **A/D** move, **Space** release the buster,
 **Q** open Custom, **Enter** play the next card, **Down** lock on (when a sword card is next), **V** shield, **Esc** menu, **M** mute music, **F11** fullscreen.
-Controller: stick/D-pad move, **RB** fire, **LB** Custom, bottom button plays a card, right button shields, top button locks on. Pro Controller supported.
+Controller: stick/D-pad move, bottom button fires, right button plays a card, top button shields, D-pad down locks on, **either bumper** opens Custom once the gauge is full (a toggle in Controls). Pro Controller supported.
 
 ## Docs
 
