@@ -432,8 +432,8 @@ func draw_charge_orb(mz: float) -> void:
 	var c := Vector2(p.x - 0.25 * s, p.y - 0.50 * s)     # the left glove, same depth as the body
 	var hand_r := s * 0.055
 	var length := s * (0.22 + charge * 0.46)
-	var amp := s * 0.03 * (0.6 + charge)
-	var strands := 14
+	var amp := s * 0.045 * (0.6 + charge)
+	var strands := 9
 	for k in strands:
 		var th := TAU * float(k) / float(strands) + 0.3 * sin(t * 2.0)       # start points all round the glove
 		var out := Vector2(cos(th), sin(th))
@@ -448,8 +448,8 @@ func draw_charge_orb(mz: float) -> void:
 			var wob := sin(t * 8.0 - u * 6.0 + float(k) * 1.7) * amp * u
 			var pt := start + dir * len_k * u + Vector2(wob, 0.0)
 			var fade := 1.0 - u
-			draw_line(prev, pt, Color(0.3, 0.8, 1.0, 0.5 * fade), 4.0 * fade + 0.7)
-			draw_line(prev, pt, Color(0.85, 1.0, 1.0, 0.9 * fade), 1.6 * fade + 0.4)
+			draw_line(prev, pt, Color(0.25, 0.75, 1.0, 0.6 * fade + 0.15), 9.0 * pow(fade, 0.8) + 1.4)
+			draw_line(prev, pt, Color(0.85, 1.0, 1.0, 0.9 * fade), 4.0 * pow(fade, 0.8) + 0.8)
 			prev = pt
 	# a thin glowing sleeve around the glove so it reads as wrapped, not spawned behind
 	draw_arc(c, hand_r * 1.15, 0.0, TAU, 20, Color(0.7, 0.97, 1.0, 0.5 + 0.3 * sin(t * 12.0)), 1.6)
