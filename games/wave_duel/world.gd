@@ -24,6 +24,9 @@ const FEET := 0.922           # where the sprite's feet sit inside its frame (se
 const BASE_HP := 100
 const MELEE := ["slash", "widesword"]   # sword cards: need lock-on, dash in and cut
 const LOCK_SPEED := 0.55                 # you move slower while locked on
+const ALIGN_TOL := 0.5                   # lock-on needs you lined up in front of the target (sideways distance, field units)
+const LOCK_GRACE := 0.8                  # a lock survives being knocked out of line for this long, then breaks
+const BREAK_TOL := 0.9                   # ...and only counts as out of line past this sideways distance (acquiring needs ALIGN_TOL)
 const PVP := false               # solo vs AI: time stops while you pick. In PvP it only stops when BOTH are picking.
 const CUSTOM_TIME := 9.0         # seconds for a full Custom gauge - same for both sides, whatever the HP
 const BUSTER_CHARGE_TIME := 1.8  # the buster charges itself; fire releases whatever is stored
@@ -72,6 +75,8 @@ var foe_use_t := 0.0
 var charge := 0.0
 var fire_prev := false
 var locked := false
+var lock_bad_t := 0.0     # how long the lock has been out of line
+var lock_flash := 0.0     # red arrows after a failed lock-on press
 var guard_t := 0.0
 var guard_age := 0.0
 var guard_cd := 0.0
@@ -234,6 +239,8 @@ func read_move(dt: float) -> float:
 			bot_t = randf_range(0.3, 0.9)
 			bot_dir = float(randi_range(-1, 1))
 			bot_hold = randf() < 0.7
+		if not queue.is_empty() and MELEE.has(str(queue[0])):
+			return clampf((float(foe["x"]) - float(me["x"])) * 3.0, -1.0, 1.0)     # line up for the sword
 		return bot_dir
 	var x := float(int(Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT)))
 	return clampf(x + Pad.dir().x, -1.0, 1.0)
@@ -284,7 +291,11 @@ func play_next_card() -> void:
 		if not (me["strike"] as Dictionary).is_empty():
 			return
 		if not locked:
-			popup(float(me["x"]), float(me["z"]), "LOCK ON FIRST  (Down)", Color("ff9f1c"))
+			popup(float(me["x"]), float(me["z"]), "LOCK ON FIRST", Color("ff9f1c"))
+			return
+		if not aligned():
+			lock_flash = 0.8
+			popup(float(me["x"]), float(me["z"]), "NOT IN FRONT", Color("ff5d5d"))
 			return
 	queue.pop_front()
 	used_pile.append(id)
@@ -326,8 +337,19 @@ func tick(dt: float) -> void:
 		open_custom()
 	if auto:
 		bot_cards()
+	lock_flash = maxf(0.0, lock_flash - dt)
 	if locked and (me["strike"] as Dictionary).is_empty() and (queue.is_empty() or not MELEE.has(str(queue[0]))):
 		locked = false
+	if locked and (me["strike"] as Dictionary).is_empty():
+		if aligned():
+			lock_bad_t = 0.0
+		else:
+			lock_bad_t += dt
+			if lock_bad_t > LOCK_GRACE:     # knocked out of line for too long: the lock breaks
+				locked = false
+				note.emit("lock-on BROKE: out of line for %.1fs (sideways distance %.2f)" % [LOCK_GRACE, absf(float(me["x"]) - float(foe["x"]))])
+				lock_flash = 0.6
+				lock_bad_t = 0.0
 	if OS.get_cmdline_user_args().has("--duellose") and phase == "fight" and t > 1.9:
 		me["hp"] = 0.0
 	if OS.get_cmdline_user_args().has("--duelresult") and phase == "fight" and t > 1.9:
@@ -350,15 +372,26 @@ func tick(dt: float) -> void:
 	if OS.get_cmdline_user_args().has("--duellock") and phase == "fight" and t > 1.9 and not struck:
 		struck = true
 		queue = ["widesword", "tide"]
+		me["x"] = foe["x"]
 		toggle_lock()
 		play_next_card()
+	var lock_demo := OS.get_cmdline_user_args().has("--duelmislock") or OS.get_cmdline_user_args().has("--duelgreen")
+	if lock_demo and phase == "fight":
+		foe["x"] = 0.4
+		foe["tx"] = 0.4
+		me["x"] = 0.4 if OS.get_cmdline_user_args().has("--duelgreen") else -0.9
+		if t > 1.9 and not struck:
+			struck = true
+			queue = ["widesword"]
+			toggle_lock()
 	if demo_strike and phase == "fight" and not struck:
 		struck = true
+		me["x"] = foe["x"]
 		locked = true
 		queue = ["slash"]
 		play_next_card()
 	if not auto and not selecting and phase == "fight":
-		var ny := Pad.dir().y
+		var ny := Pad.stick().y          # the stick only: the D-pad lock-on arrives as a button event, polling it too toggled twice
 		if ny > 0.7 and lock_prev <= 0.7:
 			toggle_lock()
 		lock_prev = ny
@@ -437,12 +470,27 @@ func update_poses() -> void:
 		foe_pose_t0 = t
 
 # Lock-on only exists for sword cards: it needs a sword as the NEXT card, and it lets go when that changes.
+func aligned() -> bool:
+	return absf(float(me["x"]) - float(foe["x"])) <= (BREAK_TOL if locked else ALIGN_TOL)
+
+var lock_at := -9.0
+signal note(text: String)
+
 func toggle_lock() -> void:
+	if t - lock_at < 0.25:
+		return     # one press is one toggle, whatever mix of events and polling reports it
+	lock_at = t
 	if phase != "fight" or selecting:
 		return
 	if not locked and (queue.is_empty() or not MELEE.has(str(queue[0]))):
 		return   # silent: the status line already says lock-on is for sword cards
-	locked = not locked   # the reticle and the status line already say "locked on": no popup for it
+	if not locked and not aligned():
+		lock_flash = 0.8     # you have to be right in front of them: red arrows, closer together
+		note.emit("lock-on pressed but NOT lined up (sideways distance %.2f)" % absf(float(me["x"]) - float(foe["x"])))
+		return
+	locked = not locked   # the reticle, the arrows and the status line already say "locked on": no popup for it
+	note.emit("lock-on %s (sideways distance %.2f)" % ["ENGAGED" if locked else "released by you", absf(float(me["x"]) - float(foe["x"]))])
+	lock_bad_t = 0.0
 	if not locked:
 		popup(float(me["x"]), float(me["z"]), "lock released", Color.WHITE)
 
@@ -485,6 +533,35 @@ func draw_defeated() -> void:
 
 # The buster charge: cyan EM-wave energy wrapped around the left glove, flaring off it and licking upward.
 # Drawn after the fighter, so it is always in FRONT of the hand; nothing is hidden behind it.
+# Lock-on arrows ahead of the fighter. Green and spread wide = you are lined up and locked in. Red and bunched together =
+# you are off to the side, so there is nothing to lock onto (shown briefly after a failed press, or while a lock is slipping).
+func draw_lock_arrows(mz: float) -> void:
+	var good := locked and lock_bad_t <= 0.0
+	var bad := (locked and lock_bad_t > 0.0) or lock_flash > 0.0
+	if not good and not bad:
+		return
+	var spread := 0.36 if good else 0.1
+	var col := Color(0.35, 1.0, 0.5) if good else Color(1.0, 0.3, 0.3)
+	var pulse := 1.0 if good else 0.65 + 0.35 * sin(t * 24.0)
+	for row in 3:
+		var u := fposmod(t * (1.2 if good else 0.5) + float(row) / 3.0, 1.0)     # drifts forward, away from you
+		var z := mz + 1.3 + u * 2.4
+		var a := pow(sin(u * PI), 0.7) * pulse
+		for c in [-1, 0, 1]:
+			var x := float(me["x"]) + float(c) * spread * (1.0 - 0.35 * u if good else 1.0)
+			var p := proj(x, z)
+			var tex := sheet("lock_arrow_green" if good else "lock_arrow_red")
+			if tex != null:
+				var size := p.z * 0.62
+				var frame := posmod(int(t * 10.0) + c * 3 + row, 8)
+				draw_texture_rect_region(tex, Rect2(p.x - size * 0.5, p.y - size * 0.7, size, size), Rect2(frame * 64, 0, 64, 64), Color(1, 1, 1, a))
+			else:
+				var h := p.z * 0.2
+				var w := h * 0.75
+				var cc := Color(col, a)
+				draw_line(Vector2(p.x - w, p.y), Vector2(p.x, p.y - h), cc, 3.0)
+				draw_line(Vector2(p.x, p.y - h), Vector2(p.x + w, p.y), cc, 3.0)
+
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]), mz)
 	var s := p.z * ME_SCALE
@@ -576,8 +653,12 @@ func bot_cards() -> void:
 		open_custom()
 		picked = [0, 1]
 		confirm_custom()
+	if OS.get_cmdline_user_args().has("--duelgreen") or OS.get_cmdline_user_args().has("--duelmislock"):
+		return     # lock-on screenshots: hold the card
 	if not queue.is_empty() and randf() < 0.02:
 		if MELEE.has(str(queue[0])):
+			if not aligned():
+				return
 			locked = true
 		play_next_card()
 
@@ -1119,6 +1200,8 @@ func draw_actors() -> void:
 					draw_slash(me, float(ms["t"]), Color(0.8, 1.0, 1.0), ME_SCALE)
 				if charge > 0.04 and mph < 0:
 					draw_charge_orb(mz)
+				if mph < 0:
+					draw_lock_arrows(mz)
 			"shot":
 				draw_shot(it["s"])
 	for pp in popups:
@@ -1235,12 +1318,20 @@ func draw_reticle() -> void:
 	var size := p.z * 1.3 * float(e["scale"])
 	var c := Vector2(p.x, p.y - size * 0.42)
 	var r := size * 0.34 * (1.0 + 0.06 * sin(t * 8.0))
-	var col := Color("ff4d4d")
+	var col := Color("5df28a") if lock_bad_t <= 0.0 else Color("ff4d4d")
+	var ctex := sheet("lock_corner_green" if lock_bad_t <= 0.0 else "lock_corner_red")
 	for sx in [-1.0, 1.0]:
 		for sy in [-1.0, 1.0]:
 			var corner := c + Vector2(sx * r, sy * r)
-			draw_line(corner, corner - Vector2(sx * r * 0.38, 0.0), col, 3.0)
-			draw_line(corner, corner - Vector2(0.0, sy * r * 0.38), col, 3.0)
+			if ctex != null:
+				# four pre-flipped frames (TL, TR, BL, BR); the outer corner of each sits 15 or 49 px into its 64 px frame
+				var cs := r * 1.15
+				var fi := (0 if sy < 0.0 else 2) + (0 if sx < 0.0 else 1)
+				var outer := Vector2(49.0 if sx > 0.0 else 15.0, 49.0 if sy > 0.0 else 15.0) / 64.0
+				draw_texture_rect_region(ctex, Rect2(corner - outer * cs, Vector2(cs, cs)), Rect2(fi * 64, 0, 64, 64))
+			else:
+				draw_line(corner, corner - Vector2(sx * r * 0.38, 0.0), col, 3.0)
+				draw_line(corner, corner - Vector2(0.0, sy * r * 0.38), col, 3.0)
 	var lab := place_text(Rect2(c.x - 30, c.y - r - 18, 60, 16))
 	draw_string(ThemeDB.fallback_font, Vector2(lab.position.x - 10, lab.position.y + 13), "LOCK-ON", HORIZONTAL_ALIGNMENT_CENTER, 80, 12, col)
 
@@ -1313,7 +1404,7 @@ func hud_items() -> Array:
 		{"id": "custom_bar", "rect": Rect2(316, 484, 236, 14), "parent": "panel", "size": 11, "samples": ["CUSTOM READY  -  press Q / LB"]},
 		{"id": "shield_bar", "rect": Rect2(560, 484, 56, 14), "parent": "panel", "size": 9, "samples": ["SHIELD"]},
 		{"id": "status", "rect": Rect2(316, 502, 300, 16), "parent": "panel", "size": 11,
-			"samples": ["Lock-on: sword cards only", "Down: LOCK ON, then use the sword card", "LOCKED ON - Enter / A: slash!", "Enter / A: use next card"]},
+			"samples": ["Lock-on: sword cards only", "Line up in front of the target to lock on", "Down: LOCK ON, then use the sword card", "LOCKED ON - Enter / A: slash!", "NOT IN FRONT - line up with the target", "Enter / A: use next card"]},
 		{"id": "slot0", "rect": Rect2(632, 484, 96, 34), "parent": "panel", "size": 12, "samples": ["Triple Shot"], "inset": 14},
 		{"id": "slot1", "rect": Rect2(736, 484, 96, 34), "parent": "panel", "size": 12, "samples": ["Wide Sword"], "inset": 14},
 		{"id": "slot2", "rect": Rect2(840, 484, 96, 34), "parent": "panel", "size": 12, "samples": ["Tide Blade"], "inset": 14},
@@ -1406,11 +1497,14 @@ func draw_hud(f: Font) -> void:
 	var scol := Color(1, 1, 1, 0.45)
 	var sword_next := not queue.is_empty() and MELEE.has(str(queue[0]))
 	if sword_next and not locked:
-		status = "Down: LOCK ON, then use the sword card"
+		status = "Down: LOCK ON, then use the sword card" if aligned() else "Line up in front of the target to lock on"
 		scol = Color("ff9f1c")
+	elif sword_next and locked and lock_bad_t > 0.0:
+		status = "NOT IN FRONT - line up with the target"
+		scol = Color("ff5d5d")
 	elif sword_next and locked:
 		status = "LOCKED ON - Enter / A: slash!"
-		scol = Color("ff5d5d")
+		scol = Color("5df28a")
 	elif not queue.is_empty():
 		status = "Enter / A: use next card"
 		scol = Color(1, 1, 1, 0.85)

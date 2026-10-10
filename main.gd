@@ -175,6 +175,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--locktest" in args:
+		run_locktest()
+		return
 	if "--cleartest" in args:
 		run_cleartest()
 		return
@@ -323,6 +326,8 @@ func start_play(recipe: Dictionary, auto := false, boons: Array = []) -> void:
 	if "folder" in runner:
 		runner.folder = (profile["folder"] as Array).duplicate()
 	runner.setup(recipe, boons)
+	if runner.has_signal("note"):
+		runner.connect("note", func(txt: String): write_log(txt))
 	if runner.has_signal("sting"):
 		runner.connect("sting", func(nm: String): music.play_sting(nm))
 	if runner.has_method("set_music"):
@@ -1411,4 +1416,41 @@ func run_cleartest() -> void:
 			last = tag
 	print("victory jingle length: %.1f s" % music.sting_length("victory"))
 	print("CLEAR FLOW OK" if (not res.is_empty() and res[0]) else "CLEAR FLOW BROKEN")
+	get_tree().quit()
+
+# Pressing lock-on must never move the fighter: it only locks if you are already lined up, and fails (red arrows) if not.
+func run_locktest() -> void:
+	Binds.load_from({})
+	var idx := 0
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	start_play(carts[idx], false)
+	await get_tree().create_timer(2.4).timeout
+	var w = runner
+	var ok := true
+	w.queue = ["widesword"]
+	w.foe["tx"] = 0.9
+	w.foe["x"] = 0.9
+	w.me["x"] = -0.8
+	var x0: float = w.me["x"]
+	await pad_tap(JOY_BUTTON_DPAD_DOWN)
+	await get_tree().create_timer(0.3).timeout
+	print("off to the side: lock-on pressed -> locked=", w.locked, " flash=%.2f" % w.lock_flash, " moved=%.3f" % absf(float(w.me["x"]) - x0))
+	ok = ok and (not w.locked) and w.lock_flash > 0.0 and absf(float(w.me["x"]) - x0) < 0.01
+	w.me["x"] = 0.8
+	w.foe["x"] = 0.9
+	w.foe["tx"] = 0.9
+	var x1: float = w.me["x"]
+	await pad_tap(JOY_BUTTON_DPAD_DOWN)
+	await get_tree().create_timer(0.3).timeout
+	print("lined up: lock-on pressed -> locked=", w.locked, " moved=%.3f" % absf(float(w.me["x"]) - x1))
+	ok = ok and w.locked and absf(float(w.me["x"]) - x1) < 0.01
+	# knocked out of line: the lock breaks after the grace time, still no help from the game
+	w.me["x"] = -1.2
+	w.foe["frozen_t"] = 10.0     # hold the target still so the test is not at the mercy of its wandering
+	await get_tree().create_timer(1.3).timeout
+	print("pushed out of line: locked=", w.locked, " (breaks after %.2fs)" % w.LOCK_GRACE)
+	ok = ok and not w.locked
+	print("LOCK-ON OK" if ok else "LOCK-ON BROKEN")
 	get_tree().quit()

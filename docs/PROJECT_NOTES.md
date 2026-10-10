@@ -33,6 +33,7 @@ group (duel / platformer / menus) used that button it loses it. Backspace (or pa
 Defaults are the owner's own layout - DO NOT CHANGE THEM without asking. Keyboard: Space fire, Q Custom, Enter play card, Down lock on, V shield, E confirm, Tab menu, W jump.
 Controller (Godot names face buttons by POSITION: A bottom, B right, X left, Y top; a Pro Controller prints them B/A/Y/X):
 bottom fire (ZR trigger always fires too), right play card / confirm, top shield, D-pad down lock on, RB Custom, Start menu, jump unbound, stick/D-pad move + card cursor.
+Lock-on rules: lock only engages when you stand in front of the target (sideways distance <= ALIGN_TOL 0.5); an existing lock tolerates 0.9 for LOCK_GRACE 0.8s then breaks. The game never moves you to line up. Green wide cones = locked, red bunched cones = not in front.
 Option "Either bumper opens Custom" (default ON, saved as `both_bumpers`): LB also opens/confirms Custom unless another duel action has claimed LB.
 Raw pad buttons reach the game (no Steam translation); `input_log.txt` in the save folder records every input, screen change and controller connect.
 Saved bindings use `bindings_v` 4; older formats are dropped. Tests: `--bindtest`, `--padtest`, `--shieldtest`, `--flowtest`.
@@ -42,6 +43,7 @@ Menus accept the D-pad as button events (one step per push); stick drift after a
 - `tools/anim_render.py` - animated pixel sprites from small 3D rigs (hero, rival, Buzzcap drone, brute) -> `art/duel_*.png` + `.json`.
   Original designs: anime-reploid look (big eyes, cropped jackets, chunky boots, big hands). Buzzcap (the helicopter drone) is a favourite.
 - `tools/backdrop_render.py` - the pre-rendered dusk city layers -> `art/bg_*.png`. (`bg_*_l*.png` light layers are unused now.)
+- `tools/arrow_render.py` - the lock-on art: faceted 3D cone arrows (green/red, 8 turning frames) and four reticle corners -> `art/lock_arrow_*.png`, `art/lock_corner_*.png`.
 - `tools/sprite_render.py` - 8-angle hub props (Mash Machine, terminal, guide bot).
 Re-run after editing a model. Sprites can be skinned by dropping same-named PNGs in `%APPDATA%\Godot\app_userdata\Cartridge Hub\art\`.
 
