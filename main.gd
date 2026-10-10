@@ -164,6 +164,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--flowtest" in args:
+		run_flowtest()
+		return
 	if "--reach" in args:
 		run_reach()
 		return
@@ -560,9 +563,29 @@ func draw_pause() -> void:
 		overlay.draw_string(f, Vector2(r.position.x, r.position.y + 26), items[i]["label"], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 17, Color.WHITE)
 	overlay.draw_string(f, Vector2(0, H - 14), "the mouse is free while this menu is open    Esc / Plus / B: resume", HORIZONTAL_ALIGNMENT_CENTER, W, 14, Color(1, 1, 1, 0.6))
 
+# A button mashed or held on one screen must not act on the next one (Bridge/hub/world hand-offs).
+const SCREEN_GRACE := 0.35
+var seen_state := -1
+var state_since := 0.0
+
+func note_state() -> void:
+	if state != seen_state:
+		write_log("state %s -> %s   (last input: %s)" % [S.keys()[seen_state] if seen_state >= 0 else "-", S.keys()[state], last_input])
+		seen_state = state
+		state_since = t
+
+func write_log(line: String) -> void:
+	var f := FileAccess.open("user://input_log.txt", FileAccess.READ_WRITE if log_started else FileAccess.WRITE)
+	if f:
+		f.seek_end()
+		f.store_line("%6.1fs  %s" % [t, line])
+		log_started = true
+
 func on_key(k: int) -> void:
 	if pause_open:
 		pause_key(k)
+		return
+	if (state == S.BRIDGE or state == S.HUB) and t - state_since < SCREEN_GRACE and k != KEY_TAB:
 		return
 	if k == KEY_TAB or (k == KEY_ESCAPE and (state == S.PLAY or state == S.HUB)):
 		open_pause()
@@ -638,6 +661,7 @@ func mash_key(k: int) -> void:
 # ---------- hub ----------
 func _process(dt: float) -> void:
 	t += dt
+	note_state()
 	msg_t = maxf(0.0, msg_t - dt)
 	bind_note_t = maxf(0.0, bind_note_t - dt)
 	report_t = maxf(0.0, report_t - dt)
@@ -1101,4 +1125,41 @@ func run_hudtest() -> void:
 		for pr in problems:
 			print("HUD PROBLEM: ", pr)
 	g.free()
+	get_tree().quit()
+
+# Hub <-> world round trip with a real (non-bot) run: die, return, re-enter the portal, pick a boon, and stay in the world.
+func run_flowtest() -> void:
+	var idx := -1
+	for i in carts.size():
+		if carts[i]["id"] == "wave_duel":
+			idx = i
+	profile["wallet"] = {"Nerve": 9, "Gold": 9, "Shards": 9, "Fangs": 9, "Static": 9}
+	var ok := true
+	for lap in 2:
+		start_play(carts[idx], false)
+		await get_tree().create_timer(2.5).timeout
+		print("lap %d: playing -> state=%s runner=%s" % [lap, S.keys()[state], runner != null])
+		ok = ok and state == S.PLAY and runner != null
+		if runner == null:
+			break
+		runner.me["hp"] = 0.0
+		await get_tree().create_timer(4.0).timeout
+		print("lap %d: after death -> state=%s runner=%s" % [lap, S.keys()[state], runner != null])
+		ok = ok and state == S.HUB and runner == null
+		hub3d.pos = Hub3D.portal_pos(idx) + Vector2(0, 1.0)
+		begin_enter(idx)
+		await get_tree().create_timer(1.0).timeout
+		print("lap %d: portal -> state=%s" % [lap, S.keys()[state]])
+		if state == S.BRIDGE:
+			var ev := InputEventKey.new()
+			ev.keycode = KEY_ENTER
+			ev.pressed = true
+			Input.parse_input_event(ev)
+			await get_tree().create_timer(1.5).timeout
+			print("lap %d: boon picked -> state=%s runner=%s" % [lap, S.keys()[state], runner != null])
+			ok = ok and state == S.PLAY and runner != null
+			if runner:
+				runner.queue_free()
+				runner = null
+	print("FLOW OK" if ok else "FLOW BROKEN")
 	get_tree().quit()

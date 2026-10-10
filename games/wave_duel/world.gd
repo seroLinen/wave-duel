@@ -30,10 +30,11 @@ const BUSTER_CHARGE_TIME := 1.8  # the buster charges itself; fire releases what
 const BUSTER_MIN := 0.25
 const BUSTER_MIN_DMG := 2.0
 const BUSTER_MAX_DMG := 12.0
-const GUARD_TIME := 1.1          # holographic shield (Y): up this long
-const GUARD_COOLDOWN := 3.0      # ...and ready again this long after you raise it
+const GUARD_TIME := 1.6          # holographic shield (Y): up this long
+const GUARD_COOLDOWN := 2.4      # ...and ready again this long after you raise it
 const PERFECT_T := 0.16          # a shot that lands this soon after raising it is reflected
-const PIERCE := ["wave", "tide"]  # the shield cannot stop these (nor sword strikes: body contact)
+const PIERCE := ["wave", "tide"]  # the shield cannot stop these outright (nor sword strikes: body contact) but takes the edge off
+const PIERCE_KEEP := 0.5         # share of a piercing hit that gets through a raised shield
 const COUNTER_BONUS := 10.0
 
 const ENEMIES := [
@@ -80,6 +81,7 @@ var prev_foe_x := 0.0
 var result_t := 0.0
 var result_won := false
 var result_pending := false
+var dead_t := 0.0      # how long you have been down (defeat animation)
 var shoot_t := 0.0
 var cast_t := 0.0
 var hurt_t := 0.0
@@ -257,6 +259,8 @@ func tick(dt: float) -> void:
 	t += dt
 	if result_pending:
 		result_t -= dt
+		if not result_won:
+			dead_t += dt
 		if result_t <= 0.0:
 			result_pending = false
 			finish_now(result_won)
@@ -284,6 +288,8 @@ func tick(dt: float) -> void:
 		bot_cards()
 	if locked and (me["strike"] as Dictionary).is_empty() and (queue.is_empty() or not MELEE.has(str(queue[0]))):
 		locked = false
+	if OS.get_cmdline_user_args().has("--duellose") and phase == "fight" and t > 1.9:
+		me["hp"] = 0.0
 	if OS.get_cmdline_user_args().has("--duelresult") and phase == "fight" and t > 1.9:
 		finish(true)
 	if phase == "fight" and t > 1.9 and not struck:
@@ -407,6 +413,17 @@ func finish_now(won: bool) -> void:
 	done = true
 	finished.emit(won, score)
 
+# Lost: the fighter takes the hit, tips over, flickers and breaks up into the floor.
+func draw_defeated() -> void:
+	var mz := float(me["z"])
+	var fall := clampf(dead_t * 1.5, 0.0, 1.0)
+	fall = fall * fall * (3.0 - 2.0 * fall)
+	var a := clampf(1.0 - (dead_t - 1.0) / 1.5, 0.0, 1.0)
+	if dead_t > 0.5 and int(dead_t * 30.0) % 3 == 0:
+		a *= 0.35
+	draw_shadow(float(me["x"]), mz, 0.34 * (1.0 - fall * 0.4))
+	draw_anim("duel_hero", "hurt", 0.3, float(me["x"]), mz, 0.0, Color(1.6 - fall * 0.6, 1.0, 1.0 + fall * 0.4, a), ME_SCALE, fall * 1.35, -0.22 * fall, sin(dead_t * 70.0) * 5.0 * clampf(1.0 - dead_t * 2.5, 0.0, 1.0))
+
 func draw_charge_orb(mz: float) -> void:
 	var p := proj(float(me["x"]) - 0.14, mz + 1.7)    # out in front of the cannon
 	var s := p.z * ME_SCALE
@@ -423,7 +440,10 @@ func draw_charge_orb(mz: float) -> void:
 # Y raises a quick shield (about a second). It stops most shots, not waves or sword strikes, costs your buster
 # charge, and a shot that hits the instant it goes up is a PERFECT GUARD: reflected back at the shooter.
 func raise_guard() -> void:
-	if phase != "fight" or selecting or guard_t > 0.0 or guard_cd > 0.0:
+	if phase != "fight" or selecting or guard_t > 0.0:
+		return
+	if guard_cd > 0.0:
+		popup(float(me["x"]), float(me["z"]), "SHIELD RECHARGING", Color("ff9f1c"))
 		return
 	if not (me["strike"] as Dictionary).is_empty() or float(me["frozen_t"]) > 0.0:
 		return
@@ -573,7 +593,11 @@ func update_shots(dt: float) -> void:
 		if int(s["owner"]) == 1 and guard_t > 0.0 and gap < 0.3 + float(s["r"]) + 0.25 and not PIERCE.has(str(s["kind"])):
 			block_shot(s)
 		elif gap < 0.3 + float(s["r"]):
-			damage(target, float(s["dmg"]), int(s["owner"]), bool(s["card"]))
+			var dmg_in := float(s["dmg"])
+			if int(s["owner"]) == 1 and guard_t > 0.0:
+				dmg_in *= PIERCE_KEEP
+				popup(float(me["x"]), float(me["z"]), "SHIELD HOLDS (HALF)", Color("7df9ff"))
+			damage(target, dmg_in, int(s["owner"]), bool(s["card"]))
 		elif int(s["owner"]) == 1 and gap < 0.3 + float(s["r"]) + 0.4:
 			near_misses += 1
 			if near_misses % 3 == 0:
@@ -895,6 +919,9 @@ func draw_actors() -> void:
 				if not (foe["strike"] as Dictionary).is_empty() and int((foe["strike"] as Dictionary)["ph"]) == 1:
 					draw_slash(foe, float((foe["strike"] as Dictionary)["t"]), Color(1.0, 0.5, 0.4), float(e["scale"]))
 			"me":
+				if phase == "result" and not result_won:
+					draw_defeated()
+					continue
 				var tint2 := Color(2.2, 2.2, 2.2, 1) if float(me["flash"]) > 0.0 else Color.WHITE
 				if float(me["frozen_t"]) > 0.0:
 					tint2 = Color(0.6, 0.9, 1.6, 1)
