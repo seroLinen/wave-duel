@@ -27,10 +27,13 @@ Godot 4.3, Compatibility renderer. Save data is NOT in this folder: `%APPDATA%\G
 - Opponent sword attacks wind up 0.5s aimed at where you stood.
 - Untuned guesses worth feel-testing: shield duration/cooldown, buster damage, custom gauge time, counter bonus.
 
-## Controls (all rebindable: Esc > Controls)
-A/D move, hold/press fire (Space/J/X/B/RB) releases buster, Q/C/LB open Custom, Enter/K/A play next card, Down lock-on, Y/V/Shift shield, Esc/Plus menu, F11 fullscreen.
-NOTE: Steam Input turns the Pro Controller's buttons into keyboard/mouse events, so the game cannot see raw pad buttons. The Controls screen records whatever arrives.
-The first button set for an action REPLACES its defaults (conflict warning shown); a button used for card/custom can never also fire.
+## Controls (Esc > Controls shows them and the last button the game saw)
+Keyboard: A/D move, Space/J fire, Q/C open Custom, Enter/K play next card (or pick in Custom), Down/S lock on, V/Shift shield, Esc/Tab menu, F11 fullscreen.
+Pad (raw buttons reach the game; Godot names them by POSITION: A bottom, B right, X left, Y top): stick/D-pad move and move the card cursor,
+bottom = play card / pick / confirm, left (or LB) = open Custom / confirm hand, right = shield, top = lock on, RB/ZR = fire buster, Start = menu.
+In the Bridge, bottom and right both confirm (Esc leaves). Added bindings are ADDITIVE: built-ins always work; Backspace in Controls removes yours.
+Old saved bindings (before bindings_v 3) are dropped on load. `--padtest` injects raw pad events into a live duel; `--shieldtest`, `--flowtest`, `--bindtest` also exist.
+Stick drift after a reconnect is handled in `pad.gd` (settle + learned rest offset).
 
 ## Tools (Python 3 + Pillow + numpy, no 3D app)
 - `tools/anim_render.py` - animated pixel sprites from small 3D rigs (hero, rival, Buzzcap drone, brute) -> `art/duel_*.png` + `.json`.
