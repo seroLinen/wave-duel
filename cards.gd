@@ -52,8 +52,8 @@ const CARDS := {
 		"why": "Trades a slot for a buffer, for a fight where you expect to be hit."},
 	"haste": {"name": "Haste", "desc": "Move 60% faster\nfor 6 seconds.", "color": "f9c74f", "el": "",
 		"why": "Footwork: makes lining up a sword and dodging easier for a few seconds."},
-	"freeze": {"name": "Freeze", "desc": "The opponent cannot\nmove or fire for 2.5s.", "color": "a8dadc", "el": "",
-		"why": "Buys a free moment: the window to line up a sword or land a heavy hit."},
+	"freeze": {"name": "Freeze", "desc": "Needs LOCK-ON (Down).\nThe opponent cannot\nmove or fire for 2.5s.", "color": "a8dadc", "el": "",
+		"why": "Buys a free moment, but only if you are lined up in front of the target: the same risk as a sword."},
 }
 
 static func order() -> Array:

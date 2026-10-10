@@ -15,7 +15,7 @@ enum S { HUB, ENTER, BRIDGE, PLAY, MASH, FOLDER }
 const W := 960.0
 const H := 540.0
 const MAX_CARTS := 15
-const WARP_RANGE := 6.0          # portals start bending the view this far away (times the world's "dread")
+const WARP_RANGE := 5.0          # portals start bending the view this far away (times the world's "dread")
 const WARP_SHADER := """
 shader_type canvas_item;
 uniform sampler2D screen_tex : hint_screen_texture, repeat_disable, filter_linear;
@@ -859,7 +859,7 @@ func update_warp() -> void:
 		var facing := Vector2(cos(hub3d.ang), sin(hub3d.ang)).dot(to_p)
 		w *= lerpf(0.12 if dread <= 1.0 else 0.7, 1.0, clampf((facing + 0.2) / 1.2, 0.0, 1.0))
 		if captured < 0:
-			w = minf(w, 0.62 * dread)
+			w = minf(w, 0.48 * dread)
 		else:
 			w = maxf(w, minf(0.9, 0.5 + capture_t * 0.6))
 		if state == S.ENTER:
@@ -1455,6 +1455,23 @@ func run_locktest() -> void:
 	await get_tree().create_timer(1.3).timeout
 	print("pushed out of line: locked=", w.locked, " (breaks after %.2fs)" % w.LOCK_GRACE)
 	ok = ok and not w.locked
+	# Freeze works like a sword: it needs the lock, so you have to be lined up in front of the target
+	w.foe["frozen_t"] = 0.0
+	w.foe["x"] = 0.9
+	w.foe["tx"] = 0.9
+	w.me["x"] = -0.8
+	w.locked = false
+	w.queue = ["freeze"]
+	w.play_next_card()
+	print("freeze without a lock: card still queued=", w.queue.size() == 1, " foe frozen=", float(w.foe["frozen_t"]) > 0.0)
+	ok = ok and w.queue.size() == 1 and float(w.foe["frozen_t"]) <= 0.0
+	w.me["x"] = 0.8
+	w.foe["frozen_t"] = 0.0
+	await get_tree().create_timer(0.3).timeout
+	w.toggle_lock()
+	w.play_next_card()
+	print("freeze locked and lined up: queue=", w.queue.size(), " foe frozen=", float(w.foe["frozen_t"]) > 0.0)
+	ok = ok and w.queue.is_empty() and float(w.foe["frozen_t"]) > 1.0
 	print("LOCK-ON OK" if ok else "LOCK-ON BROKEN")
 	get_tree().quit()
 
