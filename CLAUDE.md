@@ -1,4 +1,4 @@
-# Cartridge Hub / Wave Duel - instructions for Claude
+# CHAKANA.EXE KAGAMI NETWORK (project name "Cartridge Hub"; duel mode "Wave Duel") - instructions for Claude
 
 Godot 4.3 game. Read `docs/PROJECT_NOTES.md` first (rules, tuning, test flags, gotchas), then `README.md` for the overview.
 

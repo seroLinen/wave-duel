@@ -109,6 +109,7 @@ var pause_sel := 0
 var overlay: Node2D            # draws the pause menu above everything (incl. the running game)
 
 func _ready() -> void:
+	DisplayServer.window_set_title("CHAKANA.EXE  KAGAMI NETWORK")     # (the project name stays "Cartridge Hub" so existing saves are found)
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # crisp pixel sprites
 	music = Music.new()
 	add_child(music)
@@ -1673,10 +1674,9 @@ func draw_title(f: Font) -> void:
 	var land := clampf((u - 0.3) / 0.45, 0.0, 1.0)
 	if logo != null and land > 0.0:
 		var sc := lerpf(1.7, 1.0, 1.0 - pow(1.0 - land, 3.0))
-		var w := 700.0 * sc
+		var w := 660.0 * sc
 		var h := w * float(logo.get_height()) / float(logo.get_width())
-		draw_texture_rect(logo, Rect2(W * 0.5 - w * 0.5, 150.0 - h * 0.5 + (1.0 - land) * -30.0, w, h), false, Color(1, 1, 1, land))
-		draw_string(f, Vector2(0, 232), "C A R T R I D G E   H U B", HORIZONTAL_ALIGNMENT_CENTER, W, 20, Color(1, 1, 1, 0.75 * land))
+		draw_texture_rect(logo, Rect2(W * 0.5 - w * 0.5, 175.0 - h * 0.5 + (1.0 - land) * -30.0, w, h), false, Color(1, 1, 1, land))
 	var impact := clampf(1.0 - absf(u - 0.75) / 0.18, 0.0, 1.0) * 0.5
 	if impact > 0.0:
 		draw_rect(Rect2(0, 0, W, H), Color(1, 1, 1, impact))

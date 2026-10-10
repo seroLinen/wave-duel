@@ -1,4 +1,6 @@
-# Cartridge Hub: Wave Duel
+# CHAKANA.EXE KAGAMI NETWORK
+
+*(working title; the game inside it is **Wave Duel**. The project folder and save data still say "Cartridge Hub".)*
 
 A first-person hub world with portals into a real-time card-duel game, built in **Godot 4.3** with pre-rendered 2D sprites
 made by my own Python 3D-to-pixel-art tools.
