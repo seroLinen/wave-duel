@@ -666,7 +666,7 @@ func _process(dt: float) -> void:
 		var turn := float(int(Input.is_key_pressed(KEY_RIGHT)) - int(Input.is_key_pressed(KEY_LEFT))) * 2.2 * dt
 		var pid := Pad.id()
 		if pid >= 0:
-			var rx := Input.get_joy_axis(pid, JOY_AXIS_RIGHT_X)
+			var rx := Pad.axis(JOY_AXIS_RIGHT_X)
 			if absf(rx) > 0.2:
 				turn += rx * 2.6 * dt
 		if captured < 0:
