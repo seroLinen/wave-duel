@@ -23,6 +23,16 @@ func _ready() -> void:
 	sting_player.volume_db = -4.0
 	add_child(sting_player)
 
+# Optional loops.json beside the tracks: {"title": 3.75} means "when title loops, jump back to 3.75 s, not 0" (a track whose
+# first play has a clean intro that the repeats should skip). Tracks not listed loop from the start.
+func loop_offset(folder: String, track: String) -> float:
+	var path := ProjectSettings.globalize_path(folder + "loops.json")
+	if FileAccess.file_exists(path):
+		var d = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if d is Dictionary:
+			return float(d.get(track, 0.0))
+	return 0.0
+
 func find(track: String) -> AudioStream:
 	if streams.has(track):
 		return streams[track]
@@ -33,6 +43,7 @@ func find(track: String) -> AudioStream:
 			var ogg := AudioStreamOggVorbis.load_from_file(path)
 			if ogg:
 				ogg.loop = true
+				ogg.loop_offset = loop_offset(folder, track)
 				s = ogg
 				break
 	streams[track] = s
@@ -49,6 +60,7 @@ func play_sting(track: String) -> float:
 	one.loop = false
 	sting_player.stream = one
 	sting_player.play()
+	want = ""          # the background music fades out for a jingle (it comes back when the screen changes)
 	return one.get_length()
 
 func sting_length(track: String) -> float:

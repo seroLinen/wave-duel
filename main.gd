@@ -843,6 +843,8 @@ func _process(dt: float) -> void:
 	if state == S.TITLE:
 		title_t += dt
 	note_state()
+	if state == S.TITLE:        # the title music starts when the title appears, not during the splashes
+		music.play_track(("title" if music.find("title") != null else "hub") if title_t >= TITLE_AT else "")
 	msg_t = maxf(0.0, msg_t - dt)
 	bind_note_t = maxf(0.0, bind_note_t - dt)
 	report_t = maxf(0.0, report_t - dt)
@@ -1347,7 +1349,9 @@ func run_flowtest() -> void:
 		if runner == null:
 			break
 		runner.me["hp"] = 0.0
-		await get_tree().create_timer(4.0).timeout
+		await get_tree().create_timer(0.4).timeout
+		runner.result_t = 0.1       # skip past the defeat jingle: this test is about the way back to the hub
+		await get_tree().create_timer(1.0).timeout
 		print("lap %d: after death -> state=%s runner=%s" % [lap, S.keys()[state], runner != null])
 		ok = ok and state == S.HUB and runner == null
 		hub3d.pos = Hub3D.portal_pos(idx) + Vector2(0, 1.0)
@@ -1455,9 +1459,9 @@ func run_padtest() -> void:
 	get_tree().quit()
 
 func run_musictest() -> void:
-	for tr in ["hub", "duel"]:
+	for tr in ["hub", "duel", "title", "victory", "defeat"]:
 		var st: AudioStream = music.find(tr)
-		print(tr, ": ", "not found" if st == null else "loaded, %.1f s, loops=%s" % [st.get_length(), (st as AudioStreamOggVorbis).loop])
+		print(tr, ": ", "not found" if st == null else "loaded, %.1f s, loops=%s, loop offset=%.2f" % [st.get_length(), (st as AudioStreamOggVorbis).loop, (st as AudioStreamOggVorbis).loop_offset])
 	music.play_track("duel")
 	await get_tree().create_timer(1.5).timeout
 	print("duel playing: ", music.player.playing, " | volume dB %.1f" % music.player.volume_db)
@@ -1858,18 +1862,18 @@ func run_roomtest() -> void:
 		room.update(0.05, Vector2(-1, -1).normalized())     # keep pushing up-left (toward the far corner)
 	print("pushed 10 seconds toward the far wall: pos=", room.pos, " inside the room: ", not room.blocked(room.pos) or true)
 	ok = ok and room.pos.x >= Room.RADIUS - 0.001 and room.pos.y >= Room.RADIUS - 0.001
-	room.pos = Vector2(2.4, 2.4)
+	room.pos = Vector2(3.0, 2.4)
 	for i in 100:
 		room.update(0.05, Vector2(2, -1).normalized())      # straight toward the desk (screen up-right, 2:1), keeping x
 	print("walked into the desk: y=%.2f (the desk starts at 0.2, so you stop around %.2f)" % [room.pos.y, 1.45 + Room.RADIUS])
-	ok = ok and room.pos.y > 1.6 and room.pos.y < 1.9 and absf(room.pos.x - 2.4) < 0.05
-	var spots := {"computer": Vector2(2.4, 2.0), "binder": Vector2(1.5, 4.2), "shop": Vector2(7.2, 2.0)}
+	ok = ok and room.pos.y > 1.6 and room.pos.y < 1.9 and absf(room.pos.x - 3.0) < 0.05
+	var spots := {"computer": Vector2(3.0, 2.2), "binder": Vector2(7.4, 2.0), "shop": Vector2(1.2, 2.8)}
 	for act in spots:
 		room.pos = spots[act]
 		var tg := room.target()
 		print("standing at the %s spot: target=%s" % [act, tg.get("act", "none")])
 		ok = ok and tg.get("act", "") == act
-	room.pos = Vector2(4.5, 5.0)
+	room.pos = Vector2(4.5, 3.6)
 	print("middle of the room: target=", room.target().get("act", "none"))
 	ok = ok and room.target().is_empty()
 	# use them

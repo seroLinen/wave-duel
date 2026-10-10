@@ -1,6 +1,9 @@
 # Audio
 
-The game plays looping `hub.ogg` (hub, Bridge, menus) and `duel.ogg` (Wave Duel). It looks in `audio/_local/` first (your private tracks win), then `audio/music/` (the public set). Press **M** in game to mute.
+Track names the game looks for: `hub` (the room, Bridge, menus), `duel` (Wave Duel), `title` (the title screen, starts when the logo appears),
+and the one-shot jingles `victory` and `defeat` (the background music fades out while they play). Add a `loops.json` next to them for any track
+that should loop from a point other than the start, e.g. `{"title": 3.749977}` (the title theme's first play has an intro its repeats skip).
+ It looks in `audio/_local/` first (your private tracks win), then `audio/music/` (the public set). Press **M** in game to mute.
 
 - `audio/music/` is **committed and public**: only original or rights-cleared audio, rendered with sounds you have the rights to.
 - `audio/_local/` is **git-ignored**: for music that stays on your own machine (for example, anything rendered with sound samples taken from a commercial game).

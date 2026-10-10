@@ -510,6 +510,11 @@ func finish(won: bool) -> void:
 	result_won = won
 	result_t = 2.8
 	result_t_total = 2.8
+	if not won:
+		sting.emit("defeat")
+		if music_ref != null:
+			result_t = clampf(float(music_ref.sting_length("defeat")) + 0.6, 2.8, 9.0)
+			result_t_total = result_t
 	if won:
 		sting.emit("victory")
 		if music_ref != null:
