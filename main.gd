@@ -694,7 +694,7 @@ func _process(dt: float) -> void:
 		overlay.queue_redraw()
 	if state == S.BRIDGE or state == S.MASH or state == S.FOLDER or pause_open:
 		# stick / D-pad navigation in menus: one step per push
-		var v := Pad.dir()
+		var v := Pad.stick()    # stick only: the D-pad arrives as button events (pad_key), so polling it too skipped every other item
 		if absf(v.x) > 0.6 and absf(nav_prev.x) <= 0.6:
 			on_key(KEY_D if v.x > 0 else KEY_A)
 		if absf(v.y) > 0.6 and absf(nav_prev.y) <= 0.6:
