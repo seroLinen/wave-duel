@@ -30,6 +30,8 @@ the portal swells to fill your view, and past a ring on the floor you lose contr
 
 **The Bridge, Chip Folder and essences** - between hub and duel you spend essences on one-run boons; you build a 12-card deck at the folder terminal; wins drop new cards.
 
+![The Bridge](docs/screenshots/the_bridge.png)
+
 ## How it's made
 
 - **Godot 4.3, GDScript.** Plug-in worlds load from `games/<id>/manifest.json`, so new games drop in without touching the hub.
@@ -60,4 +62,4 @@ Controls (all rebindable under Esc > Controls): **A/D** move, **Space** release 
 
 Playable prototype: hub, Bridge, Chip Folder, and Wave Duel with three opponents. Next up: elements, a card shop, bosses and new stages, sound.
 
-License: not chosen yet (all rights reserved until I do).
+License: [MIT](LICENSE). The "not affiliated with Capcom" note above still applies.
