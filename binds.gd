@@ -7,6 +7,7 @@ extends RefCounted
 const ACTIONS := [
 	{"id": "confirm", "label": "Confirm / interact"},
 	{"id": "menu", "label": "Pause menu"},
+	{"id": "back", "label": "Back (menus)"},
 	{"id": "fire", "label": "Fire / charge buster"},
 	{"id": "jump", "label": "Jump (platformer)"},
 	{"id": "custom", "label": "Open Custom (card hand)"},
@@ -19,13 +20,14 @@ const ACTIONS := [
 const GROUPS := [
 	["fire", "custom", "card", "lockon", "shield"],   # the duel
 	["fire", "jump"],                                  # the platformer worlds
-	["confirm", "menu"],                               # menus
+	["confirm", "menu", "back"],                       # menus
 ]
 
 # The defaults are the layout the game was tuned and played with. (Pad buttons are by position: A bottom, B right, X left, Y top.)
 const DEFAULTS := {
 	"confirm": {"kb": {"t": "key", "c": KEY_E}, "pad": {"t": "joy", "c": JOY_BUTTON_B}},
 	"menu": {"kb": {"t": "key", "c": KEY_TAB}, "pad": {"t": "joy", "c": JOY_BUTTON_START}},
+	"back": {"kb": {"t": "key", "c": KEY_BACKSPACE}, "pad": {"t": "joy", "c": JOY_BUTTON_X}},      # (Esc always goes back too)
 	"fire": {"kb": {"t": "key", "c": KEY_SPACE}, "pad": {"t": "joy", "c": JOY_BUTTON_A}},
 	"jump": {"kb": {"t": "key", "c": KEY_W}, "pad": {}},
 	"custom": {"kb": {"t": "key", "c": KEY_Q}, "pad": {"t": "joy", "c": JOY_BUTTON_RIGHT_SHOULDER}},

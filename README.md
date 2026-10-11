@@ -50,6 +50,8 @@ Jacking in bends the screen with a warp shader on the way into the Bridge. (An e
 1. Install [Godot 4.3](https://godotengine.org/download/archive/4.3-stable/).
 2. Open `project.godot` (or run `godot --path .`). On Windows, double-click `play.bat` (put the path to your Godot exe in `godot_path.txt`, or set a `GODOT` environment variable).
 
+On Windows 11 you can also add it to the Start menu as an app (no desktop icon): `powershell -ExecutionPolicy Bypass -File tools\install_start_menu.ps1`.
+
 Re-render art (needs Python 3, Pillow, numpy): `python tools/anim_render.py` and `python tools/backdrop_render.py`.
 
 Controls (all rebindable under Esc > Controls, one keyboard key and one controller button per action): **A/D** move, **Space** release the buster,

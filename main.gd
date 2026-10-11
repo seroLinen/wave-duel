@@ -199,6 +199,9 @@ func _ready() -> void:
 	if "--hudtest" in args:
 		run_hudtest()
 		return
+	if "--backtest" in args:
+		run_backtest()
+		return
 	if "--roomtest" in args:
 		run_roomtest()
 		return
@@ -511,6 +514,9 @@ func _input(e: InputEvent) -> void:
 		if Binds.matches("confirm", e):
 			on_key(KEY_E)
 			return
+	if Binds.matches("back", e) and back_allowed():
+		on_key(KEY_ESCAPE)
+		return
 	if state == S.HUB and not pause_open and e is InputEventMouseMotion:
 		if captured < 0:
 			hub3d.ang += e.relative.x * 0.003
@@ -607,6 +613,18 @@ func pause_choose(id: String) -> void:
 	elif id == "quit":
 		get_tree().quit()
 
+# "Back" works wherever there is a menu to back out of. It does not exist on the Bridge (a stray back press there once kicked you
+# out of the boon screen) or in the world itself.
+func back_allowed() -> bool:
+	if bind_mode != 0:
+		return false          # on the Controls screen Backspace / the left button mean "reset this row"; Esc leaves
+	if pause_open:
+		return true
+	return (state == S.HUB and room_menu) or state == S.FOLDER or state == S.MASH or (state == S.TITLE and title_menu)
+
+func back_hint() -> String:
+	return Binds.short(Binds.get_slot("back", "pad")) if Pad.id() >= 0 else Binds.short(Binds.get_slot("back", "kb"))
+
 func pad_status() -> String:
 	var id := Pad.id()
 	if id < 0:
@@ -627,21 +645,21 @@ func draw_controls(f: Font) -> void:
 	overlay.draw_string(f, Vector2(610, 112), "CONTROLLER", HORIZONTAL_ALIGNMENT_CENTER, 190, 12, Color("7df9ff"))
 	var n := Binds.ACTIONS.size()
 	for i in n + 2:
-		var r := Rect2(120, 118 + i * 36, 720, 31)
+		var r := Rect2(120, 116 + i * 32, 720, 28)
 		var row_sel := i == bind_sel
 		overlay.draw_rect(r, Color(1, 1, 1, 0.10 if row_sel else 0.04))
 		overlay.draw_rect(r, Color(1, 1, 1, 0.5 if row_sel else 0.2), false, 1.0)
 		if i == n:
-			overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 21), "Either bumper opens Custom (LB or RB)", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-			overlay.draw_string(f, Vector2(r.position.x + 290 + 210, r.position.y + 21), "ON" if Binds.both_bumpers else "OFF", HORIZONTAL_ALIGNMENT_LEFT, 190, 17, Color("90be6d") if Binds.both_bumpers else Color(1, 1, 1, 0.5))
+			overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 19), "Either bumper opens Custom (LB or RB)", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+			overlay.draw_string(f, Vector2(r.position.x + 290 + 210, r.position.y + 19), "ON" if Binds.both_bumpers else "OFF", HORIZONTAL_ALIGNMENT_LEFT, 190, 17, Color("90be6d") if Binds.both_bumpers else Color(1, 1, 1, 0.5))
 			continue
 		if i == n + 1:
-			overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 21), "Reset ALL controls to defaults", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("ff9f1c") if row_sel else Color(1, 1, 1, 0.7))
+			overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 19), "Reset ALL controls to defaults", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("ff9f1c") if row_sel else Color(1, 1, 1, 0.7))
 			continue
 		var a: Dictionary = Binds.ACTIONS[i]
-		overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 21), str(a["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+		overlay.draw_string(f, Vector2(r.position.x + 16, r.position.y + 19), str(a["label"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 		for c in 2:
-			var cell := Rect2(r.position.x + 280 + c * 210, r.position.y + 3, 190, 25)
+			var cell := Rect2(r.position.x + 280 + c * 210, r.position.y + 3, 190, 22)
 			var csel := row_sel and bind_col == c
 			var b: Dictionary = Binds.get_slot(str(a["id"]), "kb" if c == 0 else "pad")
 			overlay.draw_rect(cell, Color(0.3, 0.8, 1.0, 0.28) if csel else Color(0, 0, 0, 0.25))
@@ -649,7 +667,7 @@ func draw_controls(f: Font) -> void:
 			var col := Color(1, 1, 1, 0.9) if c == 0 else Color("7df9ff")
 			if b.is_empty():
 				col = Color(1, 1, 1, 0.3)
-			overlay.draw_string(f, Vector2(cell.position.x, cell.position.y + 18), Binds.short(b), HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 15, col)
+			overlay.draw_string(f, Vector2(cell.position.x, cell.position.y + 16), Binds.short(b), HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 15, col)
 	if bind_note_t > 0.0:
 		overlay.draw_string(f, Vector2(0, 494), bind_note, HORIZONTAL_ALIGNMENT_CENTER, W, 15, Color("ff9f1c") if bind_note.contains("taken from") else Color("90be6d"))
 	overlay.draw_string(f, Vector2(0, H - 30), pad_status() + "    last: " + (last_input if last_input != "" else "-"), HORIZONTAL_ALIGNMENT_CENTER, W, 13, Color("7df9ff"))
@@ -763,7 +781,7 @@ func on_key(k: int) -> void:
 	if (state == S.BRIDGE or state == S.HUB) and t - state_since < SCREEN_GRACE and k != KEY_TAB:
 		return
 	if USE_ROOM and state == S.HUB and room_menu and k == KEY_ESCAPE:
-		room_menu = false                 # Esc closes the jack-in list first, not the whole game
+		room_key(k)                       # Esc backs out of the computer a page at a time (never straight to the pause menu)
 		return
 	if k == KEY_TAB or (k == KEY_ESCAPE and (state == S.PLAY or state == S.HUB)):
 		open_pause()
@@ -1945,7 +1963,7 @@ func draw_computer(f: Font) -> void:
 	elif room_page == "apps":
 		draw_string(f, Vector2(x0, y0), "Nothing installed yet.", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
 		draw_multiline_string(f, Vector2(x0, y0 + 34), "The little mini-games will live here as apps, and what they pay out will show up in your wallet.", HORIZONTAL_ALIGNMENT_LEFT, 640, 16, 4, Color(1, 1, 1, 0.65))
-	var foot := "up / down: choose     confirm: open     back: " + ("close" if room_page == "" else "desktop")
+	var foot := "up / down: choose     confirm: open     back (%s): %s" % [back_hint(), "close" if room_page == "" else "desktop"]
 	draw_string(f, Vector2(win.position.x, win.end.y - 14), foot, HORIZONTAL_ALIGNMENT_CENTER, win.size.x, 13, Color(1, 1, 1, 0.45))
 
 # The room: you cannot leave it or walk through furniture, each of the three things works, and the computer takes you into a world.
@@ -1995,4 +2013,26 @@ func run_roomtest() -> void:
 	room_key(KEY_E)
 	print("shop says: ", msg); ok = ok and msg != ""
 	print("ROOM OK" if ok else "ROOM BROKEN")
+	get_tree().quit()
+
+# A controller must be able to back out of every menu with its Back button (default: the left face button).
+func run_backtest() -> void:
+	Binds.load_from({})
+	var ok := true
+	state = S.FOLDER
+	await pad_tap(JOY_BUTTON_X)
+	print("folder: Back button leaves it -> ", S.keys()[state]); ok = ok and state == S.HUB
+	await get_tree().create_timer(0.6).timeout        # (a screen change ignores input for a third of a second on purpose)
+	room_menu = true
+	room_page = "wallet"
+	await pad_tap(JOY_BUTTON_X)
+	print("computer page: Back goes to the desktop -> page='", room_page, "' open=", room_menu); ok = ok and room_page == "" and room_menu
+	await pad_tap(JOY_BUTTON_X)
+	print("computer desktop: Back closes it -> open=", room_menu); ok = ok and not room_menu
+	enter_title()
+	title_t = TITLE_AT + 3.0
+	title_menu = true
+	await pad_tap(JOY_BUTTON_X)
+	print("title menu: Back returns to PRESS START -> menu open=", title_menu); ok = ok and not title_menu
+	print("BACK OK" if ok else "BACK BROKEN")
 	get_tree().quit()

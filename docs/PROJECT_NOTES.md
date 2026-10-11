@@ -34,6 +34,12 @@ Furniture is placeholder boxes until the room is dressed to look like the owner'
 `USE_ROOM` in `main.gd` switches back to the old first-person hub (`hub3d.gd`). Test: `--roomtest`; screenshot flags: `--roompos=x,y,facing`, `--roommenu`.
 Title/boot: `--title --titlet=SECONDS [--titlemenu]`, `--titletest`. Logo: `tools/title_render.py`. The splash name is `STUDIO` in `main.gd`.
 
+## Controller "Back"
+A rebindable action `back` (default: left face button / Backspace; Esc always works). It works in the computer window (a page at a time), the card folder, the mash screen,
+the title menu and the pause menus - and deliberately NOT on the Bridge (a stray back press once kicked the player out of the boon screen) or in the world. On the Controls
+screen Back is off (Backspace / the left button reset a row there). Test: `--backtest`.
+App entry: `tools/install_start_menu.ps1` makes a Start-menu shortcut (icon from `tools/make_icon.py`); Godot's path comes from `godot_path.txt`.
+
 ## Design intent
 See `docs/DESIGN_INTENT.md`. Every card / element / opponent / HUD element needs a "why"; `--hudtest` enforces it. Elements: Ember>Moss>Spark>Tide>Ember (x2 / x0.5). Between opponents the queue returns to the folder, the folder reshuffles and gauges reset. New tests: `--elementtest`, `--locktest`, `--cleartest`.
 

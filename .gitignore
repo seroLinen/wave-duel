@@ -28,3 +28,6 @@ godot_path.txt
 # music kept on this machine only (not cleared for the public repo)
 audio/_local/
 music_path.txt
+
+# editor bookkeeping (the game loads its art straight from the png files)
+*.import
