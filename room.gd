@@ -18,6 +18,7 @@ const RADIUS := 0.28
 const SPEED := 130.0          # screen pixels per second
 const REACH := 1.25           # how close you must be to a piece of furniture to use it
 const SPAWN := Vector2(4.2, 3.3)
+const RUG := Vector2(6.5, 4.8)          # centre of the round rug; its 1.7 x 1.5 footprint must stay clear of the furniture (roomtest checks)
 const FACINGS := ["S", "SW", "W", "NW", "N", "NE", "E", "SE"]    # rows of art/room_hero.png
 
 var pos := SPAWN
@@ -155,16 +156,16 @@ func draw_room_shell(c: CanvasItem, t: float) -> void:
 	c.draw_line(proj(0, 0, 0), proj(0, 0, WALL_H), Color(0, 0, 0, 0.3), 2.0)
 	_draw_right_wall(c, t)
 	_draw_left_wall(c)
-	# a round rug in front of the bed
+	# a round rug beside the bed (clear of it: nothing may cover any part of the rug)
 	var pts := PackedVector2Array()
 	for k in 28:
 		var a := TAU * float(k) / 28.0
-		pts.append(proj(5.6 + cos(a) * 1.7, 4.9 + sin(a) * 1.5))
+		pts.append(proj(RUG.x + cos(a) * 1.7, RUG.y + sin(a) * 1.5))
 	c.draw_colored_polygon(pts, Color("5a4470"))
 	var pts2 := PackedVector2Array()
 	for k in 28:
 		var a := TAU * float(k) / 28.0
-		pts2.append(proj(5.6 + cos(a) * 1.15, 4.9 + sin(a) * 1.0))
+		pts2.append(proj(RUG.x + cos(a) * 1.15, RUG.y + sin(a) * 1.0))
 	c.draw_colored_polygon(pts2, Color("73588c"))
 
 func _draw_right_wall(c: CanvasItem, t: float) -> void:
@@ -237,18 +238,42 @@ func draw_hero(c: CanvasItem, tex: Texture2D, meta: Dictionary, shadow: bool = t
 	var top_left := feet - Vector2(size * 0.5, size * float(meta["feet"]))
 	c.draw_texture_rect_region(tex, Rect2(top_left, Vector2(size, size)), Rect2(frame * fw, face * fw, fw, fw))
 
+# things that sit on another piece (monitors on the desk, the blanket on the bed) are drawn right after the piece under them
+func base_of(fu: Dictionary) -> Dictionary:
+	if not fu.has("z0"):
+		return fu
+	var cx := float(fu["x"]) + float(fu["w"]) * 0.5
+	var cy := float(fu["y"]) + float(fu["d"]) * 0.5
+	for o in furniture:
+		if o.has("z0"):
+			continue
+		if cx >= float(o["x"]) and cx <= float(o["x"]) + float(o["w"]) and cy >= float(o["y"]) and cy <= float(o["y"]) + float(o["d"]):
+			return o
+	return fu
+
+func furn_depth(fu: Dictionary) -> float:
+	var o := base_of(fu)
+	return float(o["x"]) + float(o["w"]) + float(o["y"]) + float(o["d"]) + (0.5 if fu.has("z0") else 0.0)
+
+# true when the hero stands behind this box (so the box is drawn over the hero)
+func hero_behind(fu: Dictionary) -> bool:
+	var x1 := float(fu["x"]) + float(fu["w"])
+	var y1 := float(fu["y"]) + float(fu["d"])
+	return not (pos.x >= x1 - 0.001 or pos.y >= y1 - 0.001)
+
 func draw(c: CanvasItem, f: Font, t: float, tex: Texture2D, meta: Dictionary, tgt: Dictionary, key_label: String = "E") -> void:
 	draw_room_shell(c, t)
-	# furniture and the hero, back to front
+	# furniture and the hero, back to front. A box is drawn after (over) the hero only when it is nearer the viewer than the hero is:
+	# comparing whole boxes (not just the far corner) is what keeps the hero from vanishing behind a bed or desk they stand in front of.
 	var items: Array = []
 	for fu in furniture:
-		items.append({"depth": float(fu["x"]) + float(fu["w"]) + float(fu["y"]) + float(fu["d"]) + (0.5 if fu.has("z0") else 0.0), "f": fu})
-	items.append({"depth": pos.x + pos.y, "hero": true})
-	items.sort_custom(func(a, b): return float(a["depth"]) < float(b["depth"]))
+		items.append({"depth": furn_depth(fu), "f": fu, "front": hero_behind(base_of(fu))})
+	items.sort_custom(func(a, b): return float(a["depth"]) < float(b["depth"]) if bool(a["front"]) == bool(b["front"]) else bool(b["front"]))
+	var hero_drawn := false
 	for it in items:
-		if it.has("hero"):
+		if bool(it["front"]) and not hero_drawn:
+			hero_drawn = true
 			draw_hero(c, tex, meta)
-			continue
 		var fu: Dictionary = it["f"]
 		draw_box(c, float(fu["x"]), float(fu["y"]), float(fu["w"]), float(fu["d"]), float(fu["h"]), float(fu.get("z0", 0.0)), fu["c"], bool(fu.get("glow", false)))
 		if fu.has("screen"):       # a monitor: a glowing screen on its lower-left face
@@ -269,6 +294,8 @@ func draw(c: CanvasItem, f: Font, t: float, tex: Texture2D, meta: Dictionary, tg
 			c.draw_colored_polygon(PackedVector2Array([proj(xf, yc - 0.12, 38.0), proj(xf, yc - 0.05, 38.0), proj(xf, yc - 0.05, 46.0), proj(xf, yc - 0.12, 46.0)]), Color("e0d2b0"))
 		if fu["id"] == "blanket":
 			draw_cat(c, t)
+	if not hero_drawn:
+		draw_hero(c, tex, meta)
 	# a small blinking mark over the monitors when the computer has something new for you
 	if notify:
 		var m := proj(1.9, 0.5, 70.0)

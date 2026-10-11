@@ -2022,6 +2022,28 @@ func run_roomtest() -> void:
 	room.pos = spots["shop"]
 	room_key(KEY_E)
 	print("shop says: ", msg); ok = ok and msg != ""
+	# nothing may hide the rug or the hero, and things on the desk and bed must be drawn over them
+	var rug_box := Rect2(Room.RUG.x - 1.7, Room.RUG.y - 1.5, 3.4, 3.0)
+	var rug_clear := true
+	var by_id := {}
+	for fu in room.furniture:
+		by_id[fu["id"]] = fu
+		if not fu.has("z0") and rug_box.intersects(Rect2(float(fu["x"]), float(fu["y"]), float(fu["w"]), float(fu["d"]))):
+			rug_clear = false
+	print("rug clear of every piece of furniture: ", rug_clear); ok = ok and rug_clear
+	var on_top := true
+	for id in ["monitor_a", "monitor_b", "keys"]:
+		on_top = on_top and room.furn_depth(by_id[id]) > room.furn_depth(by_id["desk"])
+	for id in ["blanket", "pillow", "pillow2"]:
+		on_top = on_top and room.furn_depth(by_id[id]) > room.furn_depth(by_id["bed"])
+	print("monitors, keyboard, blanket and pillows are drawn over the desk and bed: ", on_top); ok = ok and on_top
+	room.pos = Vector2(2.0, 8.4)
+	var in_front := not room.hero_behind(by_id["bed"])
+	room.pos = Vector2(2.0, 4.4)
+	var behind := room.hero_behind(by_id["bed"])
+	room.pos = Vector2(3.0, 2.2)
+	var desk_front := not room.hero_behind(by_id["desk"])
+	print("hero is drawn over the bed from the foot, under it from the far side, over the desk from the chair side: ", in_front and behind and desk_front); ok = ok and in_front and behind and desk_front
 	print("ROOM OK" if ok else "ROOM BROKEN")
 	get_tree().quit()
 
