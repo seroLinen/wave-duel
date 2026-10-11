@@ -471,6 +471,16 @@ func pad_key(b: int) -> int:
 # and the latest one shows at the bottom-left of the hub.
 var last_input := ""
 var log_started := false
+# Test, screenshot and headless runs log to input_log_test.txt so they never wipe the player's log;
+# a normal launch keeps the previous session as input_log_prev.txt.
+var log_path := ""
+
+func open_log() -> FileAccess:
+	if log_path == "":
+		log_path = "user://input_log_test.txt" if OS.get_cmdline_user_args().size() > 0 or DisplayServer.get_name() == "headless" else "user://input_log.txt"
+		if log_path == "user://input_log.txt" and FileAccess.file_exists(log_path):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(log_path), ProjectSettings.globalize_path("user://input_log_prev.txt"))
+	return FileAccess.open(log_path, FileAccess.READ_WRITE if log_started else FileAccess.WRITE)
 
 func log_input(e: InputEvent) -> void:
 	var line := ""
@@ -483,7 +493,7 @@ func log_input(e: InputEvent) -> void:
 	else:
 		return
 	last_input = line
-	var f := FileAccess.open("user://input_log.txt", FileAccess.READ_WRITE if log_started else FileAccess.WRITE)
+	var f := open_log()
 	if f:
 		f.seek_end()
 		f.store_line("%6.1fs  state=%d paused=%s  %s  (pads connected: %s)" % [t, state, pause_open, line, Input.get_connected_joypads()])
@@ -768,7 +778,7 @@ func note_state() -> void:
 		music.play_track(want)
 
 func write_log(line: String) -> void:
-	var f := FileAccess.open("user://input_log.txt", FileAccess.READ_WRITE if log_started else FileAccess.WRITE)
+	var f := open_log()
 	if f:
 		f.seek_end()
 		f.store_line("%6.1fs  %s" % [t, line])
