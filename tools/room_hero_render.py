@@ -17,7 +17,8 @@ import anim_render as ar
 
 S, TAU, PI = ar.S, ar.TAU, ar.PI
 # yaw (degrees) that makes the model face each screen direction. Checked by eye: see art/room_hero_preview.png
-FACINGS = {"S": 0, "SW": 45, "W": 90, "NW": 135, "N": 180, "NE": 225, "E": 270, "SE": 315}
+# (the first version had left and right mirrored: W showed the hero facing right. Verified by looking at the sheet after the fix.)
+FACINGS = {"S": 0, "SW": 315, "W": 270, "NW": 225, "N": 180, "NE": 135, "E": 90, "SE": 45}
 
 
 def walk_frames():
